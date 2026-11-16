@@ -1,0 +1,162 @@
+import { CRMLeadRow, fetchCRMLeads } from '../../crm/leads';
+import { kylasFetch } from '../../core/kylas-client';
+import { B2B_INBOUND_OWNER_IDS, B2B_INBOUND_PAGE_SIZE } from './constants';
+import { b2bInboundRule, kylasLeadIdentity, mapInboundLead } from './mappers';
+import { B2BInboundPage, ClientTicketResult, InboundLeadDetail } from './types';
+import { categoryLabelsFromIds, cf, cfCount, cfString, normalizeTicketPhone } from './utils';
+import { selectionsFromKylasLabels } from '@/components/b2b/models/inbound';
+export async function fetchB2BInboundLeads(
+  page = 0,
+  ownerIds: number[] = B2B_INBOUND_OWNER_IDS,
+  search = '',
+  createdAfter = '',
+  createdBefore = '',
+  kylasStage?: number,
+  size = B2B_INBOUND_PAGE_SIZE,
+): Promise<B2BInboundPage> {
+  let res;
+  try {
+    res = await kylasFetch(`/search/lead?sort=createdAt,desc&page=${page}&size=${size}`, {
+      method: 'POST',
+      body: JSON.stringify(b2bInboundRule(ownerIds, search, createdAfter, createdBefore, kylasStage)),
+    });
+  } catch {
+    return { leads: [], page, hasMore: false, total: 0, ok: false };
+  }
+  const content: Record<string, any>[] = res?.content || [];
+  const total = typeof res?.totalElements === 'number' ? res.totalElements : content.length;
+  const totalPages = typeof res?.totalPages === 'number'
+    ? res.totalPages
+    : Math.ceil(total / size);
+  return {
+    leads: content.map(mapInboundLead),
+    page,
+    hasMore: page + 1 < totalPages,
+    total,
+    ok: true,
+  };
+}
+
+export async function fetchInboundLeadDetail(leadId: string | number): Promise<InboundLeadDetail> {
+  try {
+    const d = await kylasFetch(`/leads/${leadId}`);
+    const pn = Array.isArray(d.phoneNumbers) && d.phoneNumbers.length ? d.phoneNumbers[0] : null;
+    const { phone, contactName, displayName } = kylasLeadIdentity(d);
+    return {
+      loaded: true,
+      kylasName: displayName,
+      contactName,
+      requirement: cfString(d, 'requirementName') ?? '',
+      selections: selectionsFromKylasLabels(
+        categoryLabelsFromIds(cf(d, 'cfCategoriesOfInterest')),
+      ),
+      leadSummary: cfString(d, 'cfSpaceRequirement'),
+      urgency: cfString(d, 'city'),
+      pincode: cfString(d, 'zipcode'),
+      presalesOwner: cfString(d, 'cfPsOwner'),
+      presalesClientType: cfString(d, 'cfClientType'),
+      presalesMissedCalls: cfCount(d, 'cfMissedCallCount'),
+      qualificationTag: cfString(d, 'companyZipcode'),
+      leadCreatedAt: d.createdAt ? String(d.createdAt) : undefined,
+      phoneId: pn && typeof pn.id === 'number' ? pn.id : undefined,
+      phone: phone || undefined,
+    };
+  } catch {
+    return { loaded: false };
+  }
+}
+
+export async function fetchLeadDeals(phone: string | number): Promise<import('../../../../components/b2b/models/mock-data').LeadDeal[]> {
+  const q = String(phone || '').trim();
+  if (!q) return [];
+  try {
+    const results = await fetchLeadsByPhone(q);
+    return results.map((r) => ({
+      id: r.id,
+      ticketId: r.ticketId,
+      status: r.status || '',
+      cartValue: Number(r.cartValue) || 0,
+      cartItems: r.cartItems || undefined,
+      branch: r.branch || undefined,
+      assignedTo: r.assignedTo || undefined,
+      createdAt: r.createdAt || undefined,
+      followUpDate: r.followUpDate || undefined,
+      closureDate: r.closureDate || undefined,
+      lostReason: r.lostReason || undefined,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchFirmDeals(phones: (string | undefined | null)[]): Promise<import('../../../../components/b2b/models/mock-data').LeadDeal[]> {
+  const wanted = [...new Set(phones.map((p) => String(p || '').replace(/\D/g, '').slice(-10)).filter((p) => p.length === 10))];
+  const lists = await Promise.all(wanted.map((p) => fetchLeadDeals(p)));
+  const seen = new Set<string>();
+  return lists.flat()
+    .filter((d) => (seen.has(d.id) ? false : (seen.add(d.id), true)))
+    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+}
+
+const enqLeadCache = new Map<string, Promise<CRMLeadRow[]>>();
+
+/** Resolve deal tickets by enquiry/cart id, with no phone involved.
+ *
+ * `/crm/leads/?enquiry_ids=` filters on the indexed `estimate.lead_id` (and the
+ * `extra_data.cart_number` fallback) and tolerates case variants server-side, so
+ * this answers even when the ticket sits on a different number from the one
+ * Kylas holds for the lead — which is why the phone-scoped lookup below used to
+ * report perfectly good Enq IDs as invalid. Throws on failure; the caller must
+ * keep "could not reach the deal system" distinct from "no such Enq ID".
+ */
+export function fetchLeadsByEnquiryId(enqId: string): Promise<CRMLeadRow[]> {
+  const want = String(enqId || '').trim();
+  if (!want) return Promise.resolve([]);
+  const hit = enqLeadCache.get(want.toUpperCase());
+  if (hit) return hit;
+
+  const promise = fetchCRMLeads({ enquiryIds: [want], page: 1, pageSize: 25 })
+    .then(({ results }) => {
+      if (!Array.isArray(results)) throw new Error('enquiry id search returned a non-array');
+      return results;
+    });
+  enqLeadCache.set(want.toUpperCase(), promise);
+  promise.catch(() => enqLeadCache.delete(want.toUpperCase()));
+  return promise;
+}
+
+const phoneLeadCache = new Map<string, Promise<CRMLeadRow[]>>();
+
+export function fetchLeadsByPhone(phone: string): Promise<CRMLeadRow[]> {
+  const want = normalizeTicketPhone(phone);
+  const hit = phoneLeadCache.get(want);
+  if (hit) return hit;
+
+  const promise = fetchCRMLeads({ q: want, page: 1, pageSize: 100, sortBy: 'createdAt', sortDir: 'desc', include: 'boq', estimates: true })
+    .then(({ results }) => (Array.isArray(results) ? results : []));
+  phoneLeadCache.set(want, promise);
+  promise.catch(() => phoneLeadCache.delete(want));
+  return promise;
+}
+
+export function invalidateLeadsByPhone(phones: string[]): void {
+  for (const p of phones) phoneLeadCache.delete(normalizeTicketPhone(p));
+}
+
+export async function fetchClientTickets(phone: string): Promise<ClientTicketResult> {
+  const want = normalizeTicketPhone(phone);
+  if (want.length !== 10) return { phone: want, state: 'ok', rows: [], rejected: 0 };
+  try {
+    const rows = await fetchLeadsByPhone(want);
+    const kept = rows.filter((r) => normalizeTicketPhone(r.clientPhone) === want);
+    return { phone: want, state: 'ok', rows: kept, rejected: rows.length - kept.length };
+  } catch (e) {
+    return {
+      phone: want,
+      state: 'failed',
+      rows: [],
+      rejected: 0,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}

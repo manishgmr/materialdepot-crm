@@ -1,0 +1,49 @@
+# Supabase migrations
+
+Every `.sql` file the CRM has ever needed, in one place. They are **not** run by
+any tool — there is no Supabase CLI wiring in this repo. Each one is pasted into
+a project's SQL Editor by hand.
+
+## Two projects. Check before you paste.
+
+This repo talks to two unrelated Supabase projects, and the filename prefix is
+the only thing that says which:
+
+| Prefix | Project | Env var |
+|---|---|---|
+| `supabase-*`, `b2b-*`, `rota_plan` | CRM — `olkkioacgccgsjjlmbhc` | `NEXT_PUBLIC_SUPABASE_URL` |
+| `site-audit-*` | Site Audit — `jqrdfnjfxqxrazfkaofm` | `NEXT_PUBLIC_SITE_AUDIT_SUPABASE_URL` |
+
+The Site Audit project is shared with the separate `material-depot-site` PWA and
+runs with RLS off by design. "The `profiles` table" always means the Site Audit
+one.
+
+## A file being committed here is not evidence it was applied
+
+This repo has shipped migrations nobody ran, more than once, and the features
+that depended on them were inert in production while looking fine in the UI.
+Probe the column before trusting a DB-backed feature.
+
+| File | Project | Applied? |
+|---|---|---|
+| `supabase-schema.sql` | CRM | yes — legacy `leads` table |
+| `supabase-users.sql` | CRM | yes — `users` table |
+| `supabase-migration-002.sql` | CRM | yes — `client_type`, `property_type`, `architect_involved` |
+| `supabase-migration-003.sql` | CRM | yes — `branches` + seed |
+| `supabase-migration-004.sql` | CRM | yes — `activity_logs` |
+| `supabase-migration-005.sql` | CRM | yes — composite PK `(id, client_phone)` + dedupe |
+| `supabase-migration-006.sql` | CRM | yes — `users.allowed_branches` |
+| `supabase-migration-007.sql` | CRM | **RETIRED** — `b2b_lead` moved to the FastAPI `b2b-backend` (`newdb`) on 2026-10-29; the B2B tab no longer reads Supabase. Kept for history only |
+| `supabase-setup-b2b_lead.sql` | CRM | **RETIRED** — see above; the live schema is now `b2b_inbound_lead`/`b2b_outreach_lead`/`b2b_client`/`b2b_kam_order` in `newdb`, created by the backend's Alembic `0018_b2b_crm` and seeded from CSV by `scripts/seed_b2b_from_csv.py` |
+| `supabase-setup-b2b_target.sql` | CRM | **RETIRED** — `b2b_target` moved to `newdb` with the above |
+| `rota_plan.sql` | CRM | yes — one row per branch |
+| `supabase-store-checklist.sql` | CRM | **NO** — written 2026-09-10, never pasted. Until it runs, `/api/store-checklist` 502s with `Could not find the table 'public.store_checklist'` and the Store Checklist tab shows that instead of a checklist. Creates the table **and** the `store_checklist_mark()` merge function — the tab needs both |
+| `b2b-team.sql` | CRM | **NO, and do not run it** — superseded 2026-10-29. Both tables now live in the FastAPI b2b-backend (migration `0020_b2b_extra_and_team`); see `docs/backends.md` |
+| `b2b-migration-inbound-status.sql` | CRM | **optional** — `normalizeStatus`/`decomposeLegacyStage` run on every read, so the board is correct whether or not this is ever run |
+| `site-audit-migration-001-branch-column.sql` | Site Audit | yes — `profiles.branch` |
+| `site-audit-migration-002-branch-mgr-role.sql` | Site Audit | yes — branch-manager role |
+| `site-audit-migration-003-staff-caps.sql` | Site Audit | **NO** — probed 2026-09-03, both columns answered `42703 column does not exist`. Superseded: its statements are repeated inside 004 (`if not exists`) |
+| `site-audit-migration-004-staff-exit.sql` | Site Audit | **NO** — staff exit is gated off in the UI until it runs. Running this one file fixes 003 too |
+
+The "Applied?" column is a record of what was true when last checked, not a
+live status. Re-probe rather than trust it.

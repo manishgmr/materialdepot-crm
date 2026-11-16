@@ -1,0 +1,1427 @@
+# Known landmines
+
+**Covers:** `(repo-wide)`
+
+## Purpose
+Bugs that have already been shipped and fixed here, kept because the shape recurs. These entries cross-reference each other, so they live in one file rather than split across modules.
+
+## Contents
+
+94 entries. They live in one file because they cross-reference each other —
+grep for a term, then read around the line you hit rather than opening all of it.
+
+- A route handler holding the service-role key is the access check — RLS is not
+- An inner join on an optional key reads as "not onboarded"
+- A grid item's `min-width: auto` defeats `overflow-x-auto` inside it
+- A Supabase write error is not an `Error`, so `String(e)` said "[object Object]"
+- A booking's date must come from the sub-job, not from its assignment
+- A tab's badge must count the rows that tab lists — derive both from one function
+- A lead's displayed id is not unique — only `ticketId` identifies a row
+- Availability is per CITY, and the Store Team kiosk was the one surface that did not know it
+- `AddStaffOverlay` never wrote a city
+- Daily caps live on `profiles`, not in localStorage — and the columns are probe-gated
+- Installer assignment flags caps, it does not block them; the auditor drawer DOES block
+- `audit_ticked` / `subjobs[].jobcard` is ONE mutable slot holding both the 3s draft autosave…
+- A photo that renders as `"1 photo"` is a photo nobody can see
+- An optimistic-then-swap upload MUST go through a functional state updater
+- The field apps write a log line more than once for one event
+- A second write that only `console.error`s on failure is silent data loss
+- `audit_ticked->sign->>name` is cheap to transfer and expensive to READ. The json path keeps…
+- COE calling began on 2026-08-31, so nothing before that date has a field-service NPS at all
+- A floor has no height
+- The read side aliases `customer_name` to `name`, and both order drawers wrote the alias back
+- `install-ops/OrderDrawer`'s `persist()` had no error handling
+- A field app's stale-write guard has to compare like with like — the guard itself was the outage
+- An SM re-assignment resets `sj.status` to `assigned` but used to leave the per-assignee…
+- These two apps are PORTS of PWA apps that are still being changed
+- `slot_reserved`/`slot_converted` pre-bookings were reaching auditors' own job lists
+- A derived force-add set can still be reverted back to a hand-written one
+- `defaultPermissionsForRole` had the identical drift, one level up
+- One phone can have several `profiles` rows (a field-app account under a personal email…
+- 13 of 129 profiles have a NULL `contact`
+- `profiles.branch` exists but is blank for every row
+- An empty `allowedBranches` means "all branches", not "no branches"
+- `planSiteAuditRoleSync` short-circuits on `profile.role === target`
+- `SiteAuditPerfView` only computes stats for people who perform jobs (`statsFor` keys off…
+- Field staff are not assigned to a store anywhere in either system
+- A service manager must only ever see EXECUTION analytics
+- Site Audit `profiles` rows double as login identities on the still-live public…
+- A reference list loaded once on mount
+- `AUDIT_COLS` (`components/site-audit/views/bm/index.tsx`) now also carries `bm_journey` and…
+- `SiteAuditBranchManagerView`'s `ROLLUP_AUDIT_COLS` is deliberately narrower than `AUDIT_COLS`…
+- Never gate a mandatory action note on `window.prompt()`/`window.confirm()`/ `window.alert()`
+- `branch_mgr` was added to the app on 2026-08-14 but the Site Audit Supabase's…
+- A boolean "cancelled" flag on a retryable capture is a one-way door
+- Never disable a field app's only forward control on a permission or device probe
+- `if (busy) return` where `busy` is state is not a lock
+- A re-assignment must only reset the assignees whose work actually changed
+- A revisit re-opens a finished sub-job, and the rollup read the old visit's `completed`
+- Only the PRIMARY installer writes `sj.status`
+- `audit_ticked` is excluded from `AUDIT_COLS` for good reason
+- The Report Card tab was hidden from the two roles whose SOP names the report card
+- The store ladder is seven deep and the CRM only ever had three of the rungs
+- Success reported off an HTTP 200 is not success when the deliverable is a record in another system
+- Two systems reacting to the same write will both act on it
+- A branch filter keyed on the cart owner dropped ₹33L of orders booked at that branch
+- A poll that gives up is not a failure, and telling the operator to retry turned one issue into three tickets
+- A revenue figure compared against Metabase must share Metabase's date basis, and one date param needs a second to mean anything
+- The Leads tab offered every salesperson in the org, so B2B reps' carts read as a retail branch's leads
+- `/crm/available-bms/?branch=` listed JP Nagar and HQ staff as Basaveshwara Nagar's BMs
+- A logged call recorded the lead's owner as the caller
+- A Kylas outage made B2B Inbound say every new lead had been called
+- The Outreach BM picker listed two people who held none of the leads
+- Custom range with no dates showed this month and called it a custom period
+- A Supabase table with an `Allow all access` anon policy is world-writable from the browser
+- A backend that decomposes a JSON blob into columns dropped every key it had no column for
+- Call duration typed in minutes showed as seconds
+- B2B calls and notes written to Kylas through the API key were credited to the key's owner
+- A rep with no team identity fell through to every rep's leads
+- Work a manager logged on a rep's lead counted for nobody
+- Reassigning a lead saved the copy the drawer opened with, deleting the calls logged since
+- A logged interaction was credited to the firm's KAM, not to whoever logged it
+- The same KAM was two people because stored rows and the team spelled the name differently
+- Performance showed less KAM revenue than Overview for the same orders
+- A reassign changed the system of record and left the copy the filter reads
+- A failed save closed the form first, so the rep lost what they typed at the site
+- "Assigned" counted every firm once the Client Database held firms nobody owned
+- A bulk GET over 4 KB came back as a bare 400
+- One failed batch marked every firm Unknown, and a different failed batch read as Never ordered
+- A whole-row save let a stale copy erase a colleague's calls
+- The Inbound board followed Kylas's owner, so a move inside Kylas took a rep's work off their list
+- A KAM signed in on a number the team list did not hold, so the whole KAM tab read 0
+- The round robin dealt leads the import never brought in, and failed on them every 5 minutes
+- A late answer for an earlier filter replaced the newer one on screen
+- A merged firm showed a rejection one of its source firms had received
+- Pausing a rep in the round robin left leads on the intake owner, because the import keeps Kylas's owner
+- A settings row saved from a stale page switched a rep's round robin back on
+- A redirect card listed only what this session had sent, so every saved redirect read "not redirected"
+- A column the CRM stopped writing still held old values, so reading it again would have attached them to new dates
+- A firm's page said "No placed order" under numbers that each showed an order
+- A Django ticket's owner and date on the enquiry card read as B2B attribution
+- My performance and the Overview counted revenue two different ways, so a rep's own figure never matched
+- A rep whose Django name differs from the team list earned ₹0 on every cart they raised
+- A column that shows only hand-logged values reads empty when nobody logs, and its filter matches nothing
+- A KPI that reads only the receiving team's rows misses every hand-off that team has not picked up
+- A KPI that asks for what the screen never lets you enter scores everyone at zero
+- A lead the import's date floor skipped cannot be reassigned, and Sync never fixes it
+
+- **The Category Revenue tab was compared against Metabase for months while
+  filtering on a different date.** It sent `created_from`/`created_to` — the
+  deal's *cart-created* date — while Metabase reports on order-placed date, so
+  every store read low and the store target cards were judged against inflated
+  shortfalls. Kompally Sept 2026 read ₹47.48L against ₹57.18L; the missing
+  ₹9.71L was September orders on deals created in August or earlier, and B2B was
+  far worse at ₹15.25L against ₹50.07L. It hid for so long because the number
+  was plausible and the gap looked like unloading and other charges. Fixed
+  2026-09-17 by sending `order_from`/`order_to` with `branch_basis=estimate`.
+  Two shapes to watch. First, **a figure that is reconciled against another tool
+  has to share that tool's basis** — the discrepancy will not announce itself,
+  it just looks like a smaller number. Second, **`order_from`/`order_to` are
+  inert without `branch_basis=estimate`**: the default `owner` basis keys the
+  branch off the cart holder, not off where the order was booked, so the two
+  params are a pair and sending one alone silently measures something else.
+  `lib/b2b/stats/pipeline.ts` was the only caller that had them paired. The
+  backend half is additive — `parse_dashboard_query` ignored all three params
+  before it shipped — so **the Django change must deploy first**; the frontend
+  landing alone drops every date filter and the tab shows all-time figures. See
+  `docs/dashboard/context.md`.
+- **The Report Card tab was hidden from the two roles whose SOP names the
+  report card.** `ROLE_TABS.sales` and `ROLE_TABS.store_manager` had no
+  `reportCard`, so a BM could not see their own card and a Store Manager could
+  not see their team's — while `admin`, `manager` and `tech`, who are not
+  reviewed on it at all, always could. It went unnoticed because the tab *did*
+  work for whoever built and demoed it. Fixed 2026-09-12 alongside the hierarchy
+  revamp. The shape to watch for: a tab that exists is not a tab the intended
+  user can reach, and `ROLE_TABS` is only the bootstrap — accounts with a
+  populated `individualPermissions` need the slug granted in Admin > Users, so
+  a constants change alone reaches almost nobody. See
+  `docs/crm-shell/context.md`.
+- **The store ladder is seven deep and the CRM only ever had three of the
+  rungs.** The business ladder is Admin/Central → Area Manager → Cluster Head →
+  Store Manager → Assistant Store Manager → Team Leader → BM, but
+  `PERMISSION_ID_TO_ROLE` goes straight from `sales` to `store_manager` to
+  `manager` and `ROLE_OPTIONS` offered nothing in between — so a BM's declared
+  checker, the TL, was a role nobody could hold. The four missing names were
+  added to `ROLE_OPTIONS` and `ROLE_TABS` on 2026-09-12, but **adding a role
+  name to this repo does not create it in Django**: `roleFromPermission` passes
+  `permission_name` through verbatim, so it round-trips only once the backend
+  knows it, and nothing in the repo can tell you whether it does. The shape to
+  watch: a role list here is a *view* of Django's permission table, never the
+  source. Visibility is resolved by `depth` rather than by walking `reportsTo`
+  precisely so that a vacant rung cannot strand anyone — with no TL in the
+  roster the SM is still the first person above a BM who resolves. See
+  `docs/org-hierarchy/context.md`.
+
+- **A Supabase write error is not an `Error`, so `String(e)` said
+  "[object Object]".** `upsert`/`deleteB2BRow` in `lib/b2b/` reported failures
+  as `e instanceof Error ? e.message : String(e)`, and a PostgrestError is a
+  plain object — so every failed write showed a rep the literal text
+  `[object Object]`. It only surfaced when the KAM board started reporting write
+  failures out loud instead of dropping them. `writeErrorMessage` pulls out
+  `message`/`details`/`hint` and appends `code`, which is the field that
+  matters: **42703 is the missing-column signature** this repo hits every time a
+  migration has not been run, and it was being hidden. Any new catch that shows
+  a backend error to a user goes through that helper.
+
+- **A booking's date must come from the sub-job, not from its assignment.**
+  `sjsForDay` derived a day's installs purely from `sj.assignments` (falling back
+  to a synthetic assignment when only `sj.installer` was set), and returned
+  nothing when both were empty — so an install that is **booked but not yet
+  assigned to an installer** did not exist as far as the Schedule tab was
+  concerned. Because future bookings are unassigned until an installer is
+  allocated, every day after today read **"No installs"** while the legacy
+  `material-depot-site` SM app showed them correctly as "Unassigned · scheduled".
+  Past days looked fine, which is what hid it: they are assigned. The nav
+  counter three files away had it right all along
+  (`orders.filter(o => o.subjobs.some(sj => sj.date === todayStr))`), so the two
+  numbers silently disagreed for any unassigned day. `sjsForDay` and
+  `ScheduleView` now fall back to `sj.date === ds` when there is no assignment.
+  Fixed 2026-09-10; the same logic was on `main` (`install-ops/shared.ts:376`)
+  since before the refactor. **An assignment is a staffing decision; the date is
+  the booking. Never read one to learn the other.**
+
+- **A tab's badge must count the rows that tab lists — derive both from one
+  function.** Four badges in `install-ops` and one in `audit-ops` were computed
+  inline next to the nav definition while the view re-derived its own list, and
+  the two rules had drifted apart: **Follow-ups** counted only follow-ups *due*
+  (`follow_up_date <= today`) while the tab listed every *open* one, so the badge
+  read 7 beside 11 rows (both modules had this); **Need Action** summed
+  `ops + followUps + resched` without the view's de-dup of follow-ups against
+  ops-calls, and counted reschedule *orders* where the view lists reschedule
+  *sub-jobs*, so it could exceed its own list; **To reschedule** likewise counted
+  orders, including ones whose order-level status was `reschedule` with no flagged
+  sub-job — rows that render nowhere; **Today's installs** counted orders while
+  the calendar counted sub-jobs. `needActionGroups`, `reschedSubjobs`,
+  `openFollowUps` and `sjsForDay` are now the single source for each queue, used
+  by the badge and the view alike. Fixed 2026-09-10; all of it predates the
+  refactor. Same family as the booking-date landmine above: **two places
+  computing one number will drift, and the badge is the half nobody checks.**
+
+- **Availability is per CITY, and the Store Team kiosk was the one surface that
+  did not know it.** An auditor/installer is assigned a city when they join and
+  works only that city. Every SM view scopes correctly through `inCity()`, but
+  `SiteAuditStoreTeamView` knew only its STORE and had no store→city map at
+  all, so it counted the entire company: JP Nagar read **"13 of 15 auditors
+  available"** off an 18-person roster that included 7 idle Hyderabad auditors,
+  when Bengaluru actually had 9 available that day. It also counted *orders*
+  company-wide, so a Hyderabad booking consumed a Bengaluru store's slot. Fixed
+  2026-09-02 with `STORE_CITY` + `cityOfStore()`; an unmapped store falls back
+  to `CITIES[0]`, so forgetting a line when a store opens is a wrong-but-bounded
+  count rather than a global one. **Filter by city CLIENT-side, not with
+  `city=eq.` in the query** — 2 live `audit_orders` rows have a NULL city and
+  `cityOf()` reads NULL as Bengaluru, so a server-side filter silently drops
+  them.
+- **`AddStaffOverlay` never wrote a city, which is how the bleed would have
+  come back with the next hire.** The installer add form posted no `city` at
+  all, so profiles landed NULL → read as Bengaluru; one live installer (Ayaz
+  Khan) is still in that state. The *auditor* form always had the field. Both
+  forms have since been replaced by the single `AddFieldStaffModal`
+  (2026-09-03 — see *Staff come and go*), which requires city AND phone and
+  defaults the city to the SM's active filter. **If you add another
+  staff-creation path, it must write `city` and `contact`** — or better, call
+  `createFieldStaff` rather than adding one.
+- **Daily caps live on `profiles`, not in localStorage — and the columns are
+  probe-gated.** Caps used to sit in `localStorage.md_audit_caps`, which made
+  them device-local: the other SM, the SM's own phone and the public kiosk all
+  disagreed, and the kiosk ignored caps entirely and counted headcount.
+  `profiles.daily_cap` (per-person default) + `profiles.cap_overrides` (jsonb,
+  per-date exceptions) replace it — see
+  `site-audit-migration-003-staff-caps.sql`. **That migration was written but
+  never actually run**: probed live on 2026-09-03, both columns answered
+  `42703 column does not exist`, so the caps feature shipped in `4f431b0` has
+  been inert in production the whole time — `rosterSelect()` probes, gets
+  "missing", and degrades every cap to its default, which means an SM setting a
+  number saw it accepted and lost it on reload. Its two statements are repeated
+  inside `site-audit-migration-004-staff-exit.sql` (all `if not exists`), so
+  running that one file fixes both. **A committed migration in this repo is not
+  evidence it has been applied — probe the column before trusting a
+  DB-backed feature.**
+  **PostgREST fails the WHOLE select with `42703` if those columns are absent**,
+  so asking for them unconditionally would take out the roster query and with it
+  the kiosk's ability to book at all. Every roster query therefore goes through
+  `rosterSelect()`, which probes once and — when the answer is *unknown* rather
+  than "missing" — returns the SAFE column list, degrading to default caps
+  instead of guessing "present" and turning a network blip into an outage.
+  Verified in all four states (columns present / absent-42703 / network blip /
+  live) before shipping. Installer caps default to the per-type constant via
+  `typeDayCap()`, so nothing changes until an SM sets a number, and wallpaper's
+  cap counts **3h SLOTS, not jobs** — do not "normalise" it against the other
+  two.
+- **Installer assignment flags caps, it does not block them; the auditor drawer
+  DOES block.** `AuditOrderDrawer.pickAuditor` hard-returns on a full cap
+  (long-standing). `AssignSection` deliberately only annotates the installer
+  option (`· at cap (2/1)`, `· capped to 0 this day`, `· starts <date>`),
+  matching both the off-day flag already there and this repo's soft-gate house
+  style — installers had NO cap enforcement before, so hard-blocking would have
+  been a new restriction on scheduling calls SMs make for good reasons. If you
+  make it a hard gate, that is a product decision, not a bug fix.
+
+- **`audit_ticked` / `subjobs[].jobcard` is ONE mutable slot holding both the 3s draft autosave
+  and the signed job card, and this port shipped without the guard that keeps them apart.** The
+  draft PATCHes `{draft:true, rooms}` with photos stripped. Reopen a completed card, touch
+  anything, and 3s later the signature, the auditor, the date and every photo are gone. The legacy
+  PWA hit this on `ENQ2026072381434` and guards with `jcHadSign` + an `audit_ticked_history`
+  archive; the port carried over neither, so the damage was silent AND unrecoverable. Live on
+  2026-09-01: **63 of 331 completed audits (19%) had a photo-stripped `{draft:true}` blob as their
+  permanent job card** — only 4 had a history snapshot (restored 2026-09-02), **59 are gone**.
+  Install side was 4 of 350, shielded only by `validateRooms` hard-requiring a room photo. Fixed
+  2026-09-02: `hadSignRef` in both field apps (a signed card on file makes the draft device-local
+  and shows an amber banner saying so), `archiveAuditTicked()` mirrors the legacy note-66 archive,
+  the restore path consults the server for a signed card FIRST (a localStorage draft used to shadow
+  it, which is the path on which the guard never learns the card was signed), and `draftPayload`
+  now keeps photos that already reached Storage — a ~120-byte URL — dropping only in-flight base64.
+  **Any new single-slot jsonb that a draft and a finished record share needs all four.**
+- **A photo that renders as `"1 photo"` is a photo nobody can see.** Area-adjustment photos were
+  captured, uploaded and stored correctly — 18 adjustments held 32 Storage URLs, all 32 HTTP 200,
+  zero base64 — and then `components/site-audit/ui/audit-room-views.tsx` printed the array's *length* while `components/site-audit/brand/pdf-brand.ts` drew
+  the adjustment table with no image column at all. The segment photo strip two lines below worked,
+  which is exactly why nobody caught it: a site auditor reported *"after uploading any image
+  related to adjustment area it's not showing in the job card after the final submission"* and
+  reasonably concluded the upload was broken. Fixed 2026-09-02 in both renderers (and both legacy
+  equivalents — see note 120 in `material-depot-site`); being a *render* fix it repairs every past
+  order retroactively. When you add a field that holds photos, render the photos.
+- **An optimistic-then-swap upload MUST go through a functional state updater.**
+  `SegmentAdjustments` took a finished `AdjustRow[]` and rebuilt it from a render-time snapshot of
+  `seg.adjust`. `SegmentPhotos` adds the photo as base64 immediately and swaps in the Storage URL
+  up to ~20s later, so that swap ran against the array as it looked BEFORE the base64 was inserted:
+  it matched nothing and wrote the pre-photo array back, **deleting the photo the auditor had just
+  attached**. Segment photos never had the bug because they were always wired through the
+  functional `onChange((r) => …)`. `onAdjust` now takes an updater, and the URL swap locates the
+  photo **by value across every row** rather than by the row index the upload started on — a row
+  added or removed mid-upload shifts that index and swaps the wrong row. Fixed 2026-09-02.
+
+- **The field apps write a log line more than once for one event, so any metric
+  counted off `log` entries must dedupe before it counts.** Arrival on time was
+  counting the same visit repeatedly — 17 install and 30 audit person-day pairs
+  in live data on 2026-08-26, one audit visit logged **20 times**, inflating the
+  install metric by 13% and the audit metric by 23%. `_anArrivalStats` now keys
+  on order + person + day (the PWA's Admin console always did; this port did
+  not). Nothing surfaced it for weeks because a percentage cannot show you its
+  own duplicate rows — it only became visible once the tiles started listing
+  them. Two rules follow: a new log-derived metric needs the same guard, and
+  mark a row "seen" only once it actually *counts*, or an entry skipped for a
+  missing slot suppresses a later write for the same visit that would have
+  resolved. See the Analytics section above.
+- **A second write that only `console.error`s on failure is silent data
+  loss.** Both COE rating forms saved the call, then projected the score into
+  `ratings` inside `try { … } catch { console.error }`. The COE saw "Call
+  logged", the score sat in the call log, and Analytics' NPS never counted it —
+  with no error anywhere a human would look. Fixed 2026-08-25: the failure is
+  surfaced in the form, `run()` now returns whether the call itself saved (so a
+  score is never projected for a call that didn't), and Category Ops →
+  ⭐ Review scores finds and pushes anything that slipped through. The same
+  shape still exists elsewhere in this repo — `upsertSiteAuditProfile()` in
+  `components/crm/index.tsx` is fire-and-forget with `.catch(console.error)`. Treat
+  `.catch(console.error)` on a write as a bug report waiting to happen.
+- **`audit_ticked->sign->>name` is cheap to transfer and expensive to READ.**
+  The json path keeps the job-card room photos off the wire, but Postgres still
+  detoasts the whole `audit_ticked` blob per row, so that select over all ~1.1k
+  audit rows dies with `57014 canceling statement due to statement timeout`
+  (500, not an empty result). `SiteAuditAnalyticsView` fetches it as its own
+  query scoped to `status=eq.completed` — the 306 rows the metric's denominator
+  actually needs — which returns in ~3s. If you add another jsonb-path column
+  to a full-table select here, time it first.
+- **COE calling began on 2026-08-31, so nothing before that date has a
+  field-service NPS at all.** For the six days from 2026-08-25 this entry said
+  not one COE call had ever been logged, and it was true: `coe_track` was `{}` on
+  all 527 `audit_orders` rows, no sub-job carried a `coe_review`, and all 444
+  rows in `ratings` were legacy on-site scores whose newest was 2026-08-24 — the
+  day this repo removed on-site collection. Old source gone, new source unused.
+  **That gap is now closed**: as of 2026-09-01 there are ~40 scored calls,
+  roughly half audit and half install, every one dated 2026-08-31 or later (it
+  went 40 → 41 inside a single session, so treat any exact figure here as a
+  floor, not a fixture), with coverage around 20 of 324 audit reviews owed and 18
+  of 282 install ones. Two consequences to expect rather than debug: **no date
+  range ending before 2026-08-31 has an NPS**, so 📊 NPS analytics' "vs prev"
+  legitimately reads "no prior period" on almost every preset, and its trend is a
+  couple of points hugging the right-hand edge. A report of "NPS is empty" for an
+  older period is this, not a code fault — check `coe_track` for calls inside the
+  window before touching the pipeline.
+
+- **A floor has no height — per-category wording belongs in `components/site-audit/data/audit-registry/index.ts`,
+  not in the capture form.** `SegmentAdjustments` hardcoded the rectangle
+  dimension pair as Height x Width, which is right for a wall and wrong for
+  `flooring`, whose own fields are Room length / Room width. It is not a rare
+  path: in a 60-order live sample, flooring carried **17 of the 28** area
+  adjustments (more than wallpaper), every one of them a Rectangle, and the
+  reasons are furniture footprints — "Bed", "Cupboard" — which have a length,
+  never a height. Now `cat.adjDim1` (absent => 'Height'). The Triangle branch
+  deliberately keeps Base x Height: there `h` is the perpendicular altitude in
+  the ½·base·height formula, and zero triangle adjustments exist in live data.
+  The stored keys stay `h`/`w` — only the label is per-category, so no migration
+  and no change to `adjRows`, whose `size` string ("6.5 x 6 ft") is
+  orientation-neutral and is what every read-only view and the PDF render.
+  `md-audit-registry.js` + `Site_Auditor_App.html` in `material-depot-site`
+  carry the identical fix; keep the two registries in step.
+- **The read side aliases `customer_name` to `name`, and both order drawers
+  wrote the alias back.** `audit_orders` and `install_orders` have a
+  `customer_name` column and no `name` column at all (`profiles` does, which is
+  what makes the mistake easy). `install-ops/shared.ts` and `audit-ops/shared.ts`
+  both map `name: r.customer_name` on load, and both drawers' "Fix details" form
+  PATCHed `{ name, phone, addr }` — PostgREST rejects the *whole* body with
+  `PGRST204 Could not find the 'name' column`, so the phone and address were
+  lost along with the name. Fixed 2026-08-26. When you add a write, check it
+  against the column list, not against the UI type: the two disagree by design
+  for `customer_name`, `matched_audit`/`matchedAudit`, `delivery_date`/
+  `deliveryDate` and `original_delivery_date`.
+- **`install-ops/OrderDrawer`'s `persist()` had no error handling, so every
+  write in that drawer failed silently.** `sbPatch` *does* throw on a non-2xx
+  (unlike `sbGet` — see the `Array.isArray` section), but `persist` was a bare
+  `await sbPatch(...)` and none of its callers caught, so the rejection escaped
+  into the click handler as an unhandled promise: no toast, no console entry a
+  user would see, a Save button indistinguishable from a dead one. That is the
+  only reason the `name` bug above survived — the SM had no way to learn the
+  write was being refused. `persist` now catches, toasts, and returns whether
+  the write landed (callers gate their form-close on it, and the three that had
+  hand-rolled try/catch now pass a `failMsg` instead).
+  `audit-ops/AuditOrderDrawer`'s `patch()` already had this shape — copy it, and
+  treat a write wrapper with no catch the same way as `.catch(console.error)`.
+- **A field app's stale-write guard has to compare like with like — the guard
+  itself was the outage.** `advanceStatus` (`components/site-audit/apps/installer/index.tsx`) and `adv`
+  (`components/site-audit/apps/auditor/index.tsx`) re-read the row before writing so an SM's concurrent
+  change can't be clobbered (added 2026-08-21, `41a60d1`). Both compared a RAW
+  DB status against the flattened on-screen one — different vocabularies — so
+  the guard fired on jobs nobody had touched, and its own toast ("refresh to see
+  the latest") could never clear it because nothing was stale. Three distinct
+  mismatches, all live on 2026-08-26: `assigned` (DB) vs `scheduled` (UI,
+  mapped in `loadJobs`); the display-only autoFlip to `callpending` 3h before
+  the slot, which is never persisted; and the installer's own
+  `assignments[].status` vs `sj.status`, which **only the PRIMARY writes** —
+  `markAdditionalComplete` writes the assignment and nothing else, so an
+  additional installer's "Your part marked complete" never moved their screen.
+  19 of 43 live installer×sub-job pairs (44%) could not be advanced at all, and
+  every freshly assigned audit was unstartable. Fixed with one derivation each:
+  `statusForInstaller(sj, email)` and `normalizeAuditStatus(s)` — `loadJobs`
+  **and** the guard must both call it, and the installer guard compares
+  `job.storedStatus` (un-flipped) rather than `job.status`. Add a status or a
+  display flip *there*, never at a call site. Note the PWA's
+  `Site_Installer_App.html` has no such guard at all, so this class of drift is
+  invisible in that app — don't take "it works in the field app" as evidence.
+- **An SM re-assignment resets `sj.status` to `assigned` but used to leave the
+  per-assignee statuses alone.** `AssignSection.saveAssign` seeds its editor by
+  spreading the existing `assignments` rows, so re-assigning after a reschedule
+  left `status:'reschedule'` on the assignment under a sub-job that said
+  `assigned` — and since the field app reads the installer's *own* status, that
+  showed them "To Reschedule — nothing to do" on a job just booked for them. It
+  now resets each saved assignment to `assigned`, treating `completed` as
+  terminal exactly as `OrderDrawer`'s `setStatus` does. Live proof this mattered:
+  `ENQ2026071279303`'s wallpaper sub-job was re-assigned to Nadeem Khan on
+  2026-08-12 *after* he had signed its job card, so `sj.status` read `assigned`
+  over an assignment that (correctly) read `completed`. `SM_Install_Dashboard.html`
+  in `material-depot-site` still has the un-fixed shape — keep them in step if
+  you touch either.
+- **These two apps are PORTS of PWA apps that are still being changed, so a
+  status this repo has never heard of can appear in shared data at any time.**
+  `partial` is a first-class SUB-JOB status written by
+  `material-depot-site`'s `Site_Installer_App.html` partial-completion flow;
+  `components/site-audit/apps/installer/index.tsx` knew nothing about it, so those sub-jobs rendered a raw
+  `partial` pill above a detail panel with **no stage card and no buttons** —
+  the same dead end as a hard block, just quieter. Both field apps now carry a
+  stage registry (`INSTALL_STAGES` / `AUDITOR_STAGES`) and fall through to a
+  self-describing "nothing for you to do right now — the office moves it on"
+  block, so the next unknown status degrades instead of rendering blank. Keep
+  the registry and the rendered branches in step.
+- **`slot_reserved`/`slot_converted` pre-bookings were reaching auditors' own
+  job lists.** 18 live reservation rows carry an `auditor_email`, so six real
+  auditors saw held store slots as jobs — un-actionable by definition, since the
+  real audit is a separate row (the reservation's `po` is that row's `pi`; 13 of
+  the 18 were already `completed` there). `SiteAuditorApp`'s `loadJobs` now
+  filters both statuses out, matching what `components/site-audit/audit-ops/views/` already does
+  for the ops list.
+- **A derived force-add set can still be reverted back to a hand-written one —
+  this has now happened twice.** `SITE_AUDIT_ROLES` (`components/crm/constants.ts`) drifted
+  from `CRM_ROLE_TO_SITE_AUDIT_ROLE` once before (`delivery` mapped to
+  `service_mgr` there but was missing here), was made genuinely derived in
+  commit `3bc84a6` (2026-08-19) — `...OVERSIGHT_CRM_ROLES,
+  ...Object.keys(CRM_ROLE_TO_SITE_AUDIT_ROLE).filter(k => map[k]),
+  'field_worker'`, plus a second independent path via the caller's own field
+  profile role — and then a teammate's large same-area rewrite the very next
+  day (`a4d5469`, "site audit fixes", introducing the `site_audit.*` slug
+  system) silently reverted BOTH: back to a hand-copied literal missing
+  `field_worker` entirely, and dropped the field-profile fallback path with
+  it. Nobody noticed until three real field workers (site auditors/
+  installers) reported no Site Audit tab at all (2026-08-24). Re-fixed the
+  same way, but **if `SITE_AUDIT_ROLES` is ever touched again — especially by
+  a large unrelated-looking "site audit fixes" commit — diff it against
+  `CRM_ROLE_TO_SITE_AUDIT_ROLE` by hand rather than trusting that "it's
+  derived" still holds**; a derivation is only as durable as the next person
+  editing the same lines knowing it's there. Add a role to the map, never to
+  a second hand-written list.
+- **`defaultPermissionsForRole` had the identical drift, one level up.** It
+  pre-checks the permission checklist in Admin > Users' Add/Edit forms and
+  used to compute defaults from `ROLE_TABS` alone, without the three
+  `resolveAllowedTabs` force-add sets. For any role missing from `ROLE_TABS`
+  (`field_worker`, `delivery_manager`, `post_sales`, `procurement`), opening
+  that person's row and hitting Save for an unrelated edit (e.g. a phone
+  number) silently saved a permission list missing `crm.site_audit` —
+  and once `individualPermissions` is non-empty, `resolveAllowedTabs`'s
+  role-based fallback never applies again, so the tab was gone for good. Both
+  functions now share one `defaultTabsForRole(role)` helper, so they can't
+  diverge. Admin > Users flags any already-saved account this already broke
+  (`⚠ Missing Site Audit` in the Permissions column) — that's a one-time
+  backfill gap code can't self-heal; re-open Edit and check the box.
+- **One phone can have several `profiles` rows** (a field-app account under a
+  personal email alongside the company one — Ashish Bhat has exactly this, and
+  the company-email row's `contact` is NULL so it can never be resolved by
+  phone). `limit=1` on a `contact=eq.` lookup picks an arbitrary one; use
+  `pickOwnProfile`, which prefers the row naming a renderable dashboard.
+- **13 of 129 profiles have a NULL `contact`.** Nothing that keys off phone —
+  own-dashboard resolution, payouts, BM attribution — can ever reach them; the
+  Users screen already surfaces this as its top amber notice.
+- **`profiles.branch` exists but is blank for every row.** Anything that scopes
+  by store should read CRM Branch Access (`allowedBranches` from `fetchUsers()`)
+  and match to profiles by exact phone, treating `profiles.branch` as an
+  optional refinement — see `SiteAuditBranchManagerView`.
+- **An empty `allowedBranches` means "all branches"**, not "no branches". Reading
+  it the other way silently puts every BM in every store.
+- **`planSiteAuditRoleSync` short-circuits on `profile.role === target`**, so it
+  will never backfill `branch` (or a corrected name) for someone whose role is
+  already right — which is all ~87 existing BMs. Fix the short-circuit before
+  relying on that sync to populate anything but the role.
+- **`SiteAuditPerfView` only computes stats for people who perform jobs**
+  (`statsFor` keys off `auditor_email` / `created_by_email`). Feeding it BMs
+  renders a wall of zeros that reads as "these people did nothing" — filter its
+  `roster` to auditor/installer/SM roles.
+- Field staff are not assigned to a store **anywhere** in either system, so
+  per-store performance is genuinely unavailable, not just unimplemented.
+- **A service manager must only ever see EXECUTION analytics.** In `material-depot-site`,
+  `Admin.html`'s Analytics is five tabs (Category, Execution, Week on week, Penetration,
+  Targets) and only Execution is field-ops; the rest carry revenue, AOV and store targets, and
+  a `service_mgr` session is pinned to Execution in three places (forced in `renderAnalytics`,
+  filtered out of the tab bar, and re-checked in `anSetTab`). **Those four commercial tabs now
+  exist here too** (ported 2026-08-26 — see the *Analytics: two halves* section below), so the
+  gate is live rather than hypothetical: `SiteAuditAnalyticsView` takes `execOnly`, and every
+  service-manager host passes it — the SM's own dashboard, the SM view inside the Role Viewer,
+  and `/site-audit-view`'s SM body. Gated twice, like the original: the tab bar renders only
+  Execution AND `pick()` refuses anything else, so a stale `md_an_tab` in localStorage can't get
+  past it. **Add a fifth mount of this view and you must decide `execOnly` for it** — the default
+  is all five tabs, i.e. the order book. Related: this repo's Role Viewer renders each role's components inline rather
+  than copying the original's iframe + localStorage impersonation, which is also why the
+  2026-08-18 preview-leak bug in that app (its note 112) has no counterpart here.
+- Site Audit `profiles` rows double as login identities on the still-live public
+  `material-depot-site.vercel.app/Login.html` (email + 4-digit passcode, no OTP).
+  Never create a profile with `passcode: null`; use `randomPasscode()`.
+- **A reference list loaded once on mount, but read on every drawer open, breaks
+  permanently on one failed fetch.** That is what killed auditor assignment;
+  `loadOrders`-style retry + a self-describing empty state is the fix, not a
+  louder `console.error`. See the `Array.isArray` section above.
+- **`AUDIT_COLS` (`components/site-audit/views/bm/index.tsx`) now also carries `bm_journey` and
+  `coe_track`**, so the conversion funnel can honour a manual "order placed"
+  tick from either the BM or the COE for the whole list in one pass. They add
+  ~16 KB to a ~2 MB payload (`log` + `skus` are almost all of it) — but do NOT
+  copy them into `ROLLUP_AUDIT_COLS`, whose whole point is being narrow.
+- **`SiteAuditBranchManagerView`'s `ROLLUP_AUDIT_COLS` is deliberately narrower
+  than `AUDIT_COLS`** (dropping `log`/`skus` cut this list from 1.9 MB per poll to
+  107 KB) — but it must keep `po`, which is never rendered and exists only so
+  `dropSupersededPreBookings` can tell a held slot from the audit it became.
+- **Never gate a mandatory action note on `window.prompt()`/`window.confirm()`/
+  `window.alert()`.** They silently no-op in the contexts this app actually runs
+  in — installed PWAs and mobile webviews commonly return `null`/`false`
+  immediately with no dialog shown at all — and desktop Chrome permanently
+  disables them per-origin once a user ticks "prevent this page from creating
+  additional dialogs". The old `requireNote()` (site-audit install-ops'
+  mandatory notes for status changes, follow-up date set/clear, installer
+  assignment, added 2026-08-24) hit exactly this: a click did nothing, no
+  error, indistinguishable from a broken button (fixed 2026-08-25). Use
+  `useNoteModal()` (`components/site-audit/hooks/use-note-modal.tsx`) instead — a
+  controlled in-page modal with the same "returns the trimmed note, or `null`
+  if cancelled/left blank; caller MUST abort on `null`" contract, just as real
+  DOM instead of a native dialog. `components/site-audit/install-ops/order-drawer/index.tsx`, `components/site-audit/install-ops/ui/assign-section.tsx`,
+  `components/site-audit/audit-ops/order-drawer/index.tsx` and — since 2026-09-01 — `components/site-audit/coe-ops/views/followups.tsx`
+  ("Mark lost") and `components/site-audit/coe-ops/wallpaper/index.tsx` ("Put on hold", "Cancel PO") use it.
+  Reuse it rather than reaching for `window.prompt` again anywhere in Site
+  Audit/Install. Those three survived four weeks past the first sweep because
+  nothing about a silently no-opping button looks broken in code review, so
+  **grep for `window.prompt` rather than assuming the sweep was complete.** The
+  last live one — `components/site-audit/install-ops/order-drawer/index.tsx`'s required reason for
+  force-completing an order with no signed job card, which also had a
+  `window.confirm` in front of it — was converted 2026-09-03; the warning the
+  confirm carried is now that `askNote` call's `preface`. As of that date a grep
+  finds `window.prompt` only inside comments like this one. `RetireStaffModal`
+  (`components/site-audit/staff/staff-modals.tsx`) was built as a modal from the start for the same reason:
+  its exit reason is what the attrition breakdown groups by.
+- **`branch_mgr` was added to the app on 2026-08-14 but the Site Audit
+  Supabase's `profiles_role_check` CHECK constraint (plain `role in (...)`,
+  not a Postgres enum type) was never widened to allow it — so every write
+  that sets `role='branch_mgr'` fails at the DB layer, silently in some
+  paths.** Found 2026-08-25 when 6 real branch managers (CRM `manager`/
+  `store_manager` permission) had been stuck at "0 members" for 11 days.
+  Three separate call sites hit this: `components/site-audit/staff/users/index.tsx`'s "Add New
+  User" (`sbPost`, surfaces the raw Postgres error to the admin — this is how
+  it was found); `applyRoleSync`'s bulk "Sync roles from CRM permissions"
+  (`sbPatch`, same failure); and `upsertSiteAuditProfile()` fired from the
+  CRM's own Admin > Users when `site_audit.branch_mgr` is ticked
+  (`components/crm/index.tsx`, fire-and-forget with `.catch(console.error)` — fails on
+  *every* save of that permission with no admin-visible error at all).
+  Migration: `site-audit-migration-002-branch-mgr-role.sql` (run against the
+  Site Audit Supabase, same as migration 001).
+  **Also worth knowing while chasing this**: a Branch Manager doesn't
+  actually need a `profiles` row to see their dashboard at all —
+  `components/site-audit/views/own-dashboard/index.tsx`'s `sessionOnlyRole` branch renders
+  `SiteAuditBranchManagerView` straight off the CRM session once
+  `permissionRole==='branch_mgr'`, which comes purely from the
+  `site_audit.branch_mgr` sub-permission slug on their CRM account (see the
+  three-role-models section above) — a `profiles` row only matters for the
+  Add-User/sync paths above, not for dashboard access itself. So if someone
+  already has a CRM login, ticking that one checkbox in Admin > Users is the
+  real fix; the migration just stops the DB from rejecting the profile-side
+  writes that go along with it.
+
+- **A boolean "cancelled" flag on a retryable capture is a one-way door.**
+  `ArrivalCameraModal`'s `retake` set `cancelledRef = true` — to disown a confirm
+  whose `uploadPhoto()` retry was still in flight — and never cleared it. Since
+  `handleConfirm` checks that flag *after* the upload, the first Retake swallowed
+  every subsequent Confirm for the life of the overlay: the modal stayed open,
+  the button cycled Uploading… → Confirm, and no arrival was ever recorded.
+  Retaking a photo is the most ordinary thing a field worker does here, so that
+  one stale boolean was a silent dead end between "on the way" and "at site"
+  (fixed 2026-08-26). It is now a per-attempt COUNTER, which is the shape this
+  needs: a flag can say "this attempt is abandoned" but has no way to say "the
+  next one is live". `camGenRef` next to it was already a counter for exactly
+  this reason — copy that, not the flag.
+- **Never disable a field app's only forward control on a permission or device
+  probe.** The same modal's shutter was `disabled={!cameraFailed && !camReady}`,
+  and `getUserMedia` can neither resolve nor reject — an Android webview with a
+  pending permission sheet, or a camera another app holds, just leaves the
+  promise open. `camReady` then stays false forever and the worker is left with
+  Cancel as the only live button, unable to mark themselves at site at all. The
+  shutter is now never disabled: it shoots the live preview when there is one and
+  otherwise opens the OS camera, with a 6s watchdog that relabels it. The
+  `material-depot-site` PWA always had this fallback (`snap.onclick` →
+  `nativeCapture()`); the port dropped it. Related: bind a MediaStream to the
+  `<video>` in an effect, not at the `getUserMedia` callsite — the element is
+  unmounted while `cameraFailed` is set, so a late grant assigned `srcObject` to
+  a null ref and left a black preview behind a live button.
+- **`if (busy) return` where `busy` is state is not a lock.** Two taps inside one
+  tick both read it as false and both write — one status change, two identical
+  log lines. `advanceStatus` (`SiteInstallerApp`), `adv` (`SiteAuditorApp`) and
+  the arrival modal's confirm all had this shape; each now holds a ref, with the
+  state kept only for the disabled styling. This is the *write-side* half of the
+  duplicate-log problem the Analytics dedupe guard compensates for on the read
+  side — see the log-duplicate landmine above. A failed upload must also never
+  fall back to embedding base64 in `log[]`: that column is fetched in full by
+  every poll and has no slim view (7 live entries, ~30-50 KB each).
+- **A re-assignment must only reset the assignees whose work actually changed.**
+  `AssignSection.saveAssign` resets each saved assignment to `assigned`, which was
+  added to stop a re-assign after a reschedule leaving `status:'reschedule'` on an
+  assignment under a sub-job that said `assigned` (the field app reads the
+  installer's own status, so that drift showed them "To Reschedule — nothing to
+  do"). Resetting **every** assignee is the opposite bug and the one the field
+  sees: the SM re-opens the form to add a second installer or fix a note, and a
+  colleague already On The Way is yanked back to "Call the customer". They confirm
+  again, the next edit resets them again. `ENQ2026071780139` collected 32 "on the
+  way" entries on 2026-08-26 in bursts that each begin seconds after an SM
+  re-assignment. Now scoped to assignees who are new to the sub-job, whose
+  date/slots moved, or who still carry `reschedule`; `completed` stays terminal.
+- **Only the PRIMARY installer writes `sj.status` — everyone else's progress
+  lives on their `assignments[]` row, and nothing in Install Ops used to read
+  it.** So the dashboard showed "At Site" on `ENQ2026082087114` while its own
+  timeline said "Flooring installation done (additional installer: Ankit
+  Sharma)" seven times over: both were true, and only one was on screen. There
+  is now ONE derivation — `assigneeStatus` / `subjobDisplayStatus` /
+  `assigneeProgress` in `install-ops/shared.ts`, mirrored by
+  `subjobEffectiveStatus` in `components/site-audit/apps/installer/index.tsx` — and every sub-job status
+  the SM sees goes through it, so the badge, the calendar, the drawer and the
+  order row cannot disagree. Three rules it must keep: a sub-job rolls up to
+  `completed` only when **every** assignee is (one installer finishing must not
+  bill the OMS service leg, which is gated on the parent rollup, nor skip the
+  customer signature); `partial` and `completed` are never overridden (`partial`
+  states that rooms are still outstanding); and `mapInstallRow`'s
+  `reconciledOrderStatus` only ever moves an order that is stuck on a TRAVEL
+  status, because `pending`/`deliv_*`/`created`/`call_na` are pre-service states
+  no sub-job speaks to and an SM's deliberate `partial` is theirs to keep. On
+  live data that reconciliation moves exactly 1 order and 1 sub-job badge, while
+  surfacing 23 installer rows whose own status had been invisible. The
+  `material-depot-site` PWA had the same split *and* fed it into the field app's
+  own `loadJobs`, which is the worse half — see note 119 there.
+- **`audit_ticked` is excluded from `AUDIT_COLS` for good reason, but
+  `mapAuditRow` hardcoding `auditTicked: null` silently disabled every category
+  display in the audit ops views.** The Categories column and the pre-booking
+  drawer could only ever fall through to `o.service`, i.e. `—` on anything
+  pre-service. And the store's own ticks never reached the audit at all: the two
+  halves of one job are two rows (see the pre-booking section above), the store
+  records the material on the reservation, and the audit row is created later by
+  `autoImportAuditOrders` from an OMS order whose only SKU at that point is the
+  audit service line — so `tickedCategories` yields `[]`, as it has on every live
+  pending audit. Fixed 2026-08-26 with `AUDIT_CATEGORY_QUERY` — a second, narrow
+  select over `PRE_CARD_STATUSES` only (210 rows / 36 KB / ~0.9s live, versus the
+  full-table select that times out) whose last good result is held in a ref so a
+  30s poll never repaints the table with the pills missing — plus a carry-over
+  keyed on **the pre-booking's `po` === the audit's `pi`**, never the name or
+  phone. It lands in a separate `storeCategories` field rather than being merged
+  into `auditTicked`, because the two were ticked by different people and
+  `categoriesAreFromStore` labels which one is on screen. **Do not "simplify"
+  this by adding `audit_ticked` to `AUDIT_COLS`.**
+- **A caught error behind a typed return is invisible at the call site, and the
+  B2B module had five of them at once.** Fixed 2026-09-10. Each wrapper caught
+  internally and returned a plausible-looking value, so a failed request
+  rendered as a confident number: `fetchB2BPipelineStats` and
+  `fetchVerticalStats` returned `EMPTY_BUCKET` (a ₹0 pipeline on the Dashboard),
+  `fetchTargets` returned the built-in 120L default (indistinguishable from a
+  team that set 120L), `saveTargets` returned `void` so a target edit looked
+  saved and was not, and `clientMetricsFrom` counted `zeroFill`'s placeholder
+  rows as real so every client read ₹0 lifetime revenue. From the user's side
+  none of these looked broken — the Dashboard just showed a bad month. The fix
+  is the same shape each time: the return type carries `ok` (or the error
+  string), and the view renders a banner instead of the number. Note the near
+  miss in the last one: `B2BBulk.ok` already existed and already gated the
+  *dates* correctly via `orderDatesFromAggregates` — the money simply never read
+  it. **When you add an `ok` flag, grep every field derived from that response,
+  not just the one that prompted the flag.** Related: the Kylas `total: 0` trap
+  in `docs/b2b/data-layer.md`, and `Array.isArray(rows) ? rows : []`.
+- **A merge that is conditional on `page === 0` silently drops local edits on
+  every other page.** `fetchInboundBoard` skipped the Supabase read unless
+  `page === 0 && !kylasStage`, so paging past the first page of the inbound
+  board — or selecting any Kylas stage filter — showed raw Kylas with the
+  team's stage, follow-up, order value and notes missing. Nothing errored and
+  the board looked normal. Fixed 2026-09-10 by always running the read and the
+  overlay, and returning early on those paths. The reason it was written that
+  way is real and worth preserving: page 0 assembles
+  `[...dbLeads, ...kylasNotInDb]`, so **"has a Supabase row" doubles as a sort
+  key** and edited leads sit above untouched ones. Rewriting the whole function
+  to overlay in Kylas order is cleaner, loses that grouping, and was reverted
+  the same day — do the early-return instead.
+- **`` `PREFIX-${Date.now()}` `` is a primary key, not a display string.**
+  `CLI-` (client) and `KAM-` (order) ids are Supabase upsert conflict targets,
+  so two people creating a record in the same millisecond silently overwrote one
+  another — no error, one record simply gone. `OR-`, `INT-` and `ESC-` had the
+  same generator. Replaced 2026-09-10 with `newB2BId(prefix)` in
+  `components/b2b/models/ids.ts`, which appends a random suffix. Grep for
+  `Date.now()}\`` before adding any new record type.
+- **RLS on the table does nothing for a route handler holding the service-role
+  key — the route itself is the access check.** `/api/store-checklist` shipped
+  with `enable row level security`, no policy, execute revoked from `anon`, and
+  a comment explaining that the browser therefore could not forge a mark. All
+  true, and all irrelevant: the route *bypasses* RLS by design, took `store`,
+  `date` and `by` from the request body, and required no token — so anyone who
+  could reach the app could read every store's compliance history, write marks
+  for any store up to 30 days back, and sign them as any name. The per-role
+  backdating (`BACKDATE_DAYS`) existed only in the React component. Fixed
+  2026-09-11 with `requireCaller` (`lib/server/session.ts`), which resolves the
+  caller from the JWT's `user_id` against the Django org roster, after which the
+  route re-runs the **same** `canUseChecklist` / `storesForActor` / `canMarkDate`
+  helpers the UI uses and stamps `by` from the session. Two general shapes:
+  **a UI-side permission check is not a permission check**, and a route handler
+  that holds a privileged key must answer "who is asking" before "what do they
+  want". The other 16 `app/api/*` routes still take no token; they proxy to
+  Kylas/Django with a server-held key rather than driving a service-role DB
+  client, so the blast radius differs, but do not read their existence as a
+  precedent for a new one.
+
+- **A grid or flex item will not shrink below its content, so an `overflow-x-auto`
+  inside one never engages.** The B2B Inbound "Today" view was
+  `grid-cols-[1fr_320px]` (replaced 2026-10-28 by the lens table) with the call table in the first track. Each bucket
+  card already wrapped its table in `overflow-x-auto`, which worked until two
+  columns (Enq / Cart ID, Assisted at EC) were added — then the track's default
+  `min-width: auto` grew to fit the table instead of letting it scroll, the page
+  became wider than `<main>`, and the whole tab scrolled sideways *under* the
+  B2B sidebar. It reads as "the layout is broken", not as "a table is too wide",
+  which is why it costs time to find. Fixed 2026-09-14 with
+  `minmax(0,1fr)` on the track plus `min-w-0` on both children. The general
+  shape: **any grid/flex child that contains something scrollable needs
+  `min-w-0` (or `minmax(0,…)` on its track)** — `overflow-x-auto` on the inner
+  element is necessary and not sufficient. `<main>` in
+  `views/b2-b-sales-crm.tsx` already carries `min-w-0` for the same reason; that
+  is what stopped this reaching the outer page chrome.
+
+- **Success reported off an HTTP 200 is not success when the deliverable is a
+  record in another system.** The Raise Escalation tab PATCHed
+  `cfRaiseEscalation` on a Kylas sales deal and showed "Updated in CRM" as soon
+  as that PATCH returned; the escalation ticket itself was cloned by a
+  `DEAL_UPDATED` webhook Kylas was expected to send back. Whenever that webhook
+  did not arrive, the field was set, no ticket existed, and the person who
+  raised it had been told it worked — so nobody chased it. A re-raise was worse:
+  it cleared the field in one PATCH and re-set it in a second, and closing the
+  tab in between left the field empty with no error, silently destroying an
+  escalation that had previously existed. Fixed 2026-09-15 by moving the whole
+  operation behind `order/crm/escalation/raise/`, which writes the field and
+  clones the ticket, and by polling until a child deal id comes back. Two
+  general shapes: **when the thing you are creating lives in another system,
+  confirm the thing, not the request**, and **a destructive first step needs a
+  recovery path that survives the tab closing**, not just a try/catch.
+
+- **Two systems reacting to the same write will both act on it.** Our PATCH on
+  the deal makes Kylas fire `DEAL_UPDATED` straight back at us, so the direct
+  raise and the webhook handler both reach the cloning code for one click. A
+  guard that only checks "did a clone already succeed" is not enough — the
+  webhook can arrive while the first clone is still in flight. The backend
+  therefore writes a claim row *before* the PATCH and treats pending as
+  blocking. Confirmed live on 2026-09-15: a raise run against production Kylas
+  produced two tickets, one from the direct call and one from the production
+  webhook handler, which did not yet have the guard.
+
+- **A branch filter keyed on the cart owner dropped ₹33L of orders booked at
+  that branch.** The B2B Dashboard asked Django for `branch=B2B`, which
+  `_filter_by_branch` resolved as `owner__user_organisations__branch__branch_name`
+  — the branch of whoever *holds the cart*. But an order's branch is
+  `estimate.branch_id`, set where it is *booked*, and the two disagree
+  constantly: of the 82 orders booked at B2B in September 2026, 49 (₹33.3L) sat
+  on carts owned by Gachibowli, HQ, JP Nagar, Whitefield or HSR staff. 84% of
+  those carried a GST number, so they were real B2B business. From the user's
+  side the tab read ₹13.44L won and 8% of a ₹1.2Cr target for a month that had
+  actually booked ₹47.4L — a number nobody could reconcile against Metabase and
+  which made the team look like it had missed by 5×.
+
+  Two separate bugs were hiding behind one symptom, and the obvious one was the
+  smaller: the panel also scoped by **cart created date**, so an August cart
+  ordered in September counted in August. Fixing only that moved the month from
+  ₹13.44L to ₹14.10L. The branch basis was the other 96% of the gap. **When a
+  figure is wrong by a multiple, measure each candidate cause separately before
+  fixing either** — the first plausible explanation here was worth ₹0.66L.
+
+  Fixed 2026-09-15 by adding `order_from`/`order_to` (on
+  `estimate.order_placed_time`) and `branch_basis=estimate` to
+  `/crm/leads/stats/`, behind a Cart created / Order placed toggle. Three things
+  fall out of it that are not obvious:
+
+  - **The two params must travel together.** Filtering by order date while still
+    keying the branch on the owner reproduces the ₹14.1L answer, which looks
+    plausible and is wrong. `basisQuery` in `lib/b2b/stats/pipeline.ts` emits
+    both or neither for exactly this reason.
+  - **The pipeline half cannot follow.** 42 of September's 77 carts had no
+    estimate at all, so they have neither an order date nor an estimate branch.
+    Total Pipeline, Active, In Cart and the status tiles stay on the created
+    basis permanently; `active` comes back 0 under an order filter, which is
+    arithmetic rather than a dropped call. Same family as the `ok`-flag rule in
+    `docs/b2b/data-layer.md` — know which zeros are real.
+  - **It exposed a second pair of disagreeing numbers on the same screen.**
+    "Order Won" read the branch total (₹13,44,897) while "Revenue Generated"
+    directly below it summed the per-rep verticals (₹10,08,823), because
+    `bm_groups` keys on rep phone and the branch total does not. Nothing on
+    screen said so. Both now read the branch total, and the remainder is drawn
+    as an explicit `No B2B rep on cart` slice rather than being quietly
+    dropped — the same "one number, one function" rule as the badge landmine.
+
+- **A revisit re-opens a finished sub-job, and the rollup kept reading the old
+  visit's `completed`.** Ops have no revisit action — they re-book the slot and
+  re-assign the installer on the sub-job that was already done. `completed` was
+  terminal on an assignment row, so the one left over from the previous visit
+  made `subjobDisplayStatus` roll the sub-job up to `completed` again, and the
+  order flipped to *Site Installation Completed* the moment the new slot was
+  booked (before the assignment was even saved). It then left every live list,
+  filter and need-action count, and the field app — which reads the installer's
+  own `assignments[]` row — showed tomorrow's revisit as "Done · Download PDF".
+  `ENQ2026090590356`, reported 2026-09-15: installed 11 Sept, SM set the order
+  Partially Completed ("shortage of 3 panels"), re-booked for the 16th,
+  re-assigned the same installer twice with the note "Revisit assigned", badge
+  read Completed throughout. Six live orders were in that shape, all
+  re-assignments after completion. `bookSlot` and `saveAssign` now clear the
+  assignee statuses when `allAssigneesDone` — **every** saved assignee reads
+  `completed` — which is the only combination that can flip the rollup and is
+  what "they are all going back" looks like in the data; one finished assignee
+  beside an unfinished one stays terminal, so the entry above still holds. The
+  same save also stops a `completed` being terminal on a row whose installer was
+  **swapped**: `pickInstaller` overwrites the installer on the existing row, so
+  the incoming person was inheriting the outgoing person's completion. The two
+  rules this leaves standing are in the `subjobDisplayStatus` entry above; the
+  code change repairs nothing already written, but re-saving the assignment does.
+
+- **A poll that gives up is not a failure, and telling the operator to retry
+  turned one issue into three tickets.** The Raise Escalation screen polled
+  `raise-status/` for 60s (2s x 30), then said it could not confirm the ticket,
+  and `DealPanel` appended a fixed **"Press Submit again to retry"** to every
+  error. On 2026-09-16 a Kylas 429 backlog left raises queued for up to seven
+  minutes — they all succeeded, the screen just stopped watching first. Deal
+  4755735 collected three real tickets (4774571 at 06:13:28, 4774572 at
+  06:13:31, 4774575 at 06:13:54) from three Submits at 06:06, 06:07 and 06:10;
+  deal 4710936 collected three more. Every duplicate was a separate request row
+  that the backend's webhook-echo guard could not see, because that guard only
+  refuses Kylas re-announcing a raise we already made. Three shapes to watch
+  for: (1) a timeout and a rejection need **opposite** advice, so a retry prompt
+  appended to all errors alike is wrong for one of them by construction — put
+  the guidance inside each message; (2) a confirmation poll must be sized for
+  the queued case, not the healthy one, and trading interval for attempts buys
+  that for free (5s x 36 is three minutes for fewer requests than 2s x 30 spent
+  on one); (3) a dedupe guard written for one duplicate source does not cover
+  another — the POST now attaches a repeat Submit to an in-flight request, and
+  deliberately does **not** match a raise that already produced a ticket, since
+  a genuine second escalation must still get through. The same incident hid
+  three backend bugs; see `md/integration/kylas/` and the
+  `crm_raise_escalation` rows in `crm_log`.
+
+- **A lead's displayed id is not unique, so matching rows on it edited a
+  sibling.** The Sales CRM leads list keys each row by `id`, which the backend
+  builds as the cart number (or the estimate's ENQ id) in
+  `_build_lead_result_rows` — one client with several deal tickets on one cart
+  gets the **same** `id` on every row. Everything that looked a row up by it
+  therefore found whichever came back first: `CrmModals` re-resolved the drawer's
+  lead with `leads.find(l => l.id === drawerLead.id)`, so opening the "In Cart"
+  row showed a lost sibling's status; `saveLead`, the date-edit handler and
+  `fetchLead` did the same. Cart `CT710700278394` had 7 deal tickets and the
+  20-Jun one (40784) could not be reached from the UI at all — it kept no
+  `extra_data.status`, and the list has no "unset" state, so it fell through to
+  the `'In Cart'` default and held its ₹180 in the stage tile indefinitely. The
+  backend half compounded it: `mark_lead_lost` used the posted `ticket_id` only
+  to fetch an estimate, then let `resolve_deal_ticket_for_user` re-derive the
+  target from `deal_holding_lead` / `active_deal_for_client` — and since
+  `active_deal_for_client` only matches `open`/`in_progress`, a client whose
+  deals were all `resolved` matched neither and fell into the create branch,
+  minting *another* resolved ticket each time. Six of those seven rows are
+  lost-marks that landed nowhere. Three shapes: (1) a list row needs an identity
+  of its own — a business key that repeats is not one, and `key={l.id + i}`
+  padding with the index is the tell that somebody already knew; (2) an id used
+  as an API argument and an id used to match a row are different jobs, so fixing
+  this meant routing matches through `ticketId` while `id` stayed the cart number
+  the endpoints expect; (3) a resolver that re-derives its target from the client
+  ignores the target the caller named — pass the row and forbid creating one
+  (`deal_ticket=` + `allow_create=False`), or a miss silently becomes a new row.
+  Fixed 2026-09-17 in `components/crm/{shell/modals,leads/actions,utils,index}.tsx`
+  and `order/crm/leads/services/{lead_actions,ticket}_service.py`. A sweep for the
+  same shape found three more sites in the first pass' blind spot: the
+  `DateEditPopup` pre-filled its dates from `leads.find(l => l.id === leadId)`, the
+  visits fetch wrote onto every sibling, and that effect's deps were `id` +
+  `clientPhone` — both identical across siblings, so switching between two rows on
+  one cart never refetched. **A save fixed in isolation is only half of it: the
+  values the operator is editing against come from a separate lookup, and that one
+  can still be reading a different row.** CSV import looked inherent — a CSV row carries no ticket
+  id — but the importer only accepts this app's own export (it demands an exact
+  header match), so the column was simply missing: `Ticket ID` now rides along as
+  an optional **trailing** column, which keeps files exported before it importable.
+  Two things it fixed beyond the merge target: the dedupe key was
+  `leadId + '|' + clientPhone`, so re-importing an export of one client's seven
+  deal tickets collapsed them into one row and dropped six; and `leadToExportRow`
+  had been writing 18 values under 19 headers ever since `Priority` was added, so
+  every exported Priority cell was blank and any new trailing column would have
+  landed one place to the left. `lib/b2b/mappers/inbound.ts` builds `id` the same derived
+  way (`kylas_lead_id || r.id`) and was checked — it is **safe**, because
+  `b2b_lead.kylas_lead_id` is `unique` and `upsertInboundLead` conflicts on it, so
+  the constraint is load-bearing rather than incidental. That is the line between
+  the two: a derived key backed by a constraint is an id, a derived key computed
+  per response — as Django does for a lead's `id` — is not, and cannot become one.
+
+- **The Leads tab offered every salesperson in the org, so B2B reps' carts read
+  as a retail branch's leads.** Reported 2026-09-23: "Hardi and Vilok's B2B
+  leads are reflecting in Basav. Nagar", with the Admin tab's permissions
+  checked and correct. Two independent causes, and the Admin tab showed the
+  first one all along under a heading nobody reads as a permission:
+
+  - **`user_organisation_branch` had Vilok Reddy attached to nine branches** —
+    B2B plus BASAVESHWARA NAGAR, GACHIBOWLI, HQ, HSR LAYOUT, JP NAGAR, KOMPALLY,
+    WHITEFIELD and YELAHANKA (verified against `materialdepot_azure` the same
+    day). Django's default branch basis keys on the **cart owner's** branch, so
+    every cart Vilok owns legitimately matches all nine stores. That is Admin >
+    Users > **Branch Access**, not CRM Permissions — a data fix, not a code one.
+    Mandeep Ghai carries the same shape at B2B + WHITEFIELD.
+  - **Hardi Patel is attached to B2B only**, yet his carts came back under a
+    BASAVESHWARA NAGAR selection. There is no column in that schema that ties
+    them to a retail store, so `/crm/leads/` did not apply `branch` on that
+    request — the reproduction also carried `bm=`, which is the likeliest thing
+    it is losing to. **Django-side; not fixable from this repo.**
+
+  What this repo did wrong is that `availableBMs` was
+  `crmUsers.map(u => u.name)` — the whole `/user-organisation/` roster, with no
+  branch scoping — so every B2B rep was pickable from a store manager's
+  Salesperson filter in the first place. It now goes through `bmsInBranchScope`
+  (`components/crm/utils.ts`), which keeps a user whose own `allowedBranches` is
+  empty (see the "all branches" entry above) or overlaps the caller's, and
+  `buildLeadsQuery` clamps `personFilter` to that same list so the dropdown and
+  the wire cannot disagree — the badge landmine's rule applied to a filter.
+
+  Two smaller holes went with it. `branch: branchCsv || undefined` **widened to
+  every branch** whenever the requested branches and the caller's scope did not
+  intersect — an empty CSV drops the param, and a dropped `branch` is "all of
+  them"; `effectiveLeadBranches` now falls back to the caller's own branches
+  instead. And the CSV/Excel/PDF export carried its own copy of that derivation
+  in `leads/csv/actions.ts`, so it had the same hole and had to be fixed twice;
+  it calls `buildLeadsQuery` now.
+
+  Because the backend half cannot be fixed here, the tab **says so** rather than
+  rendering the rows as if they were the branch's: `offScopeLeadBranches`
+  compares each returned row's `branch` against what was asked for and the panel
+  renders an amber notice naming the branches that leaked. Same rule as the
+  `basisApplied` echo in `docs/api-layer/context.md` — a filter the backend
+  quietly ignores is the frontend half of "never present a failed request as
+  data", and it was invisible here for as long as the tab has existed.
+
+- **`/crm/available-bms/?branch=` listed JP Nagar and HQ staff as
+  Basaveshwara Nagar's BMs.** Reported 2026-09-25: eight people (seven attached
+  to JP NAGAR only, one to HQ only in `user_organisation_branch`) showed up as
+  Basaveshwar Nagar in the dashboard. It wasn't a data problem. Their branch
+  rows were correct, none of the 1,042 leads returned for that branch was
+  assigned to any of them, and none of their estimates was booked there. The
+  endpoint answered BASAVESHWARA NAGAR with 30 names, and the roster attached
+  only 5 of them to it. Those five own every lead in that branch. The rule
+  Django uses was not fully pinned down (some of the extras share a client or
+  cart with a Basaveshwara Nagar rep, three share nothing visible), but the
+  endpoint is plainly "anyone linked to this branch", not "people homed here":
+  on the same day YELAHANKA returned 132 names and 92 of them were homed
+  elsewhere.
+
+  Nine places took that list as the branch's people: the Overview, Order Lost
+  and Category Revenue BM filters, Weekly Funnel, both Footfall views, the
+  Report Card's roster-failure fallback and the B2B EC picker.
+  `fetchAvailableBMs` now reconciles the list against `/user-organisation/`
+  whenever it is given a branch, so all nine are fixed in one place. See
+  `docs/weekly-funnel/context.md` for the keep/drop rules. The Django endpoint
+  itself is unchanged and still worth fixing on the backend.
+
+  The same session found the EC picker had never listed a BM for any EC. It
+  sent `apptBranchesFromCrm`'s label ("Basaveshwar Nagar") and Django matches
+  only its own upper-case names, so every EC answered with an empty list. It
+  now sends the Django names each EC label came from.
+
+- **Kylas PATCH needs JSON Patch.** `PATCH /leads|deals|contacts/{id}` only
+  accepts `application/json-patch+json` with an array of ops. `kylasFetch`
+  defaults to `application/json`, so a plain-object PATCH fails with 415. The
+  inbound drawer shipped that way and every Requirement/Selection push failed.
+
+- **A logged call recorded the lead's owner as the caller** (fixed
+  2026-10-28). The inbound drawer stamped `CallAttempt.by = draft.owner`. That
+  was harmless while each lead had one owner for life, and silently wrong the
+  moment leads could be reassigned: every call already on a lead would read as
+  the new owner's. "Calls per rep" (an Inbound Effort KPI) would then credit
+  calls to someone who never made them. The figure would look plausible from
+  the user's side, which is why nobody would catch it. `by` is now the
+  logged-in user's name. The general shape: **an actor field must be filled
+  from the session, never from the record being acted on.** Effort is
+  credited to the actor, output to the owner at the time of the outcome.
+
+- **A Kylas outage made B2B Inbound say every new lead had been called.**
+  Found 2026-10-28 by forcing the Kylas search to 500 in a browser.
+  `fetchB2BInboundLeads` caught the error into `{ leads: [], total: 0 }`.
+  `fetchInboundBoard` then went ahead with the CRM-database rows alone and
+  dropped every DB row still at `New` that Kylas had not returned, which was
+  all of them. The board rendered 884 leads with no error. First call read
+  "0 · all called" and the Kylas total vanished. A rep would read that as a
+  clean inbox. The database half had the same shape: its catch logged to the
+  console and returned `[]`. Both now return `ok`. The Inbound view treats
+  `ok: false` as a failed load: tiles say "Unknown" and a retry panel replaces the
+  table. (Since 2026-11-03 the board reads CRM rows only, so a Kylas outage
+  costs search results, not the board.) Same family as the "Every stats read carries an `ok`" note in
+  `docs/b2b/data-layer.md`: a catch behind a typed return is invisible at the
+  call site unless the type says so. **Other readers of `fetchB2BInboundLeads`
+  still ignore `ok`**: `fetchInboundOwnerTotals` and `leads/unified.ts`
+  (the Leads tab).
+
+- **The Outreach BM picker listed two people who held none of the leads**
+  (fixed 2026-10-28). Its options were `scope.reps`: the Outreach members of
+  `b2b_team_member`, or `B2B_ROSTER` while that table is missing, which it
+  still is. The roster names two BMs. On 2026-10-28 the 53 real Outreach rows
+  belonged to five others plus one of those two (who held a single lead). A
+  manager could not narrow the board to anyone who actually had leads, and the
+  KPI strip multiplied every team target by those 2 heads. Nothing errored; the
+  picker simply looked complete. Options now come from `bmOptions()`
+  (`views/outreach/utils.ts`): the team members plus every BM name found on the
+  leads, each with its lead count, and the head count is that list while the
+  team table is not live. The shape: **a filter's options must be read off the
+  data it filters, not off a list of who is supposed to be there.** Same family
+  as the Leads tab offering every salesperson in the org.
+
+- **Custom range with no dates showed this month and called it a custom
+  period** (fixed 2026-10-29). In the Outreach scorecard, picking "Custom range"
+  left both date inputs empty. `rangeFor('custom')` returned `null`, and the
+  page fell back to this month. The line beside the picker still read "1 Oct –
+  31 Oct · no monthly targets", and the tiles were this month's numbers with
+  the targets stripped off. The user saw a blank range that seemed to be doing
+  something. Picking Custom now seeds both dates from the period on screen,
+  with the end clamped to today. If a date is cleared, the line says in amber
+  that it is showing the fallback. The shape: **when a picker falls back, the
+  label must describe the fallback, not the option that was picked.** Same
+  family as presenting a failed request as data.
+
+- **A Supabase table with an `Allow all access` anon policy is world-writable
+  from the browser.** The B2B `b2b_lead`/`b2b_target` tables were reached with
+  the public `NEXT_PUBLIC_SUPABASE_ANON_KEY` under a `for all using(true) with
+  check(true)` RLS policy (see the retired `supabase-setup-b2b_lead.sql`), so
+  anyone who could load the CRM could read, insert, update or delete every B2B
+  lead — no token needed, the anon key is in the JS bundle. The anon key being
+  "just the anon key" is not a defence when the policy is open; RLS *is* the
+  auth there. Fixed 2026-10-29 by moving B2B to the FastAPI `b2b-backend`: the
+  browser now reaches it only through `app/api/b2b/[...path]`, which runs
+  `requireCaller` and the `admin`/`b2b_sales` gate before relaying with a
+  server-only `x-sync-key`. Same shape as the first entry in this file (a route
+  handler holding a privileged key IS the access check) — a backend that trusts
+  the caller needs the caller authenticated one layer out. See
+  `docs/b2b/data-layer.md` and `docs/backends.md`. When you migrate a backend,
+  ship it first: the frontend flip only works once `0018_b2b_crm` is applied and
+  the tables are seeded (`scripts/seed_b2b_from_csv.py`), or `GET /api/b2b/rows`
+  502s and the zero-caching rule turns that into a durable wrong number.
+
+- **A backend that decomposes a JSON blob into columns dropped every key it had no column for.** Found 2026-10-29 while merging `main` into the B2B revamp
+  branch. PR #27's `b2b_crm` router rebuilt `meta_data` from columns on read
+  and kept only the keys that matched a column on write. The branch had added
+  `invalid_reason`, `invalid_note`, `pi_shared_at`, `office_location` and
+  `outreach_referral` (and Outreach `alt_phone`, `contacts`). None of these
+  had a column. Every save returned 200, and on reload the Invalid reason, the
+  note and the whole Send to Outreach referral were blank. So no lead could
+  ever reach Outreach's pool. Fixed by backend migration `0020`: an `extra`
+  jsonb holds every key without a column (`docs/b2b/data-layer.md`). The shape:
+  **a translation layer that accepts a superset and stores a subset must say so
+  loudly or keep the remainder.** A 200 is not evidence the data landed; read
+  the row back.
+
+- **Call duration typed in minutes showed as seconds** (fixed 2026-10-29). The inbound call form asked for minutes
+  and posted `duration=N&durationType=minutes` to Kylas. Kylas ignored the unit
+  and stored N seconds, so the call records showed a 4-minute call as "0m 4s".
+  Nothing errored. Calls are now stored in the CRM as `durationMin` and no longer
+  posted to Kylas (next entry). The shape: **a unit passed as a separate field is
+  an assumption about the receiver;** check the read-back, not the request.
+
+- **B2B calls and notes written to Kylas through the API key were credited to the key's owner** (fixed 2026-10-29). The inbound drawer logged every call
+  attempt as a Kylas call log, and every note as a Kylas note, using the
+  browser's shared API key. Kylas records the creator as the key's user, so
+  every B2B call appeared as made by one Presales person, mixed in with real
+  Presales calls, and team notes looked written "by Kylas". Calls and notes now
+  stay in the CRM row with the session user as author, and Kylas data is shown
+  read-only in the From Presales card. Records written before the fix remain in
+  Kylas under the key owner's name. Same family as "A logged call recorded the
+  lead's owner as the caller": **the actor must come from the session, and a
+  shared credential has no session.**
+
+- **A rep with no team identity fell through to every rep's leads** (fixed
+  2026-10-29). Inbound scoped by `scope = choice ?? (myKylasId ? 'mine' :
+  'all')`, and Outreach showed every BM's leads whenever the team table was
+  missing or failed. So the people the scope could not identify (a rep not yet
+  added under B2B → Team, a rep without a linked Kylas user, everyone on a day
+  the team list failed to load) were exactly the ones who saw everyone's leads.
+  The user had asked from the start that a rep sees only their own data. Now an
+  unidentified non-manager gets an empty Inbound board with a notice naming the
+  fix, and Outreach falls back to matching by BM phone or name. The shape:
+  **when a scope cannot tell who someone is, it must narrow, not widen.**
+  "Show everything with a warning" is a fair soft gate for a missing feature, but
+  not for an access rule.
+
+- **Work a manager logged on a rep's lead counted for nobody** (fixed
+  2026-10-30). Inbound calls credit `CallAttempt.by` and KAM meetings and calls
+  credit `interaction.loggedBy`, which is correct for a rep logging their own
+  work. But the user, signed in as the manager, logged a Connected call on
+  Asha's lead, and Asha's Calls on the Leadership Board did not move. The call
+  went to the manager, who is on no team, so no card showed it. It looked like
+  the KPIs were not wired to the CRM at all. Now a logger who is not on that
+  team's list is replaced by the lead's owner or the firm's KAM (`onTeamList`,
+  `leadership.md`). The shape: **crediting the actor is right only when the
+  actor is someone being scored**; otherwise the work belongs to the record's
+  owner. The inverse of "A logged call recorded the lead's owner as the
+  caller".
+
+- **Reassigning a lead saved the copy the drawer opened with, deleting the
+  calls logged since** (fixed 2026-10-30). The Inbound drawer's owner picker
+  wrote `{ ...lead, ...owned }`, where `lead` is the prop the drawer opened
+  with. Calls logged in that drawer were in `saved.current`, not in `lead`.
+  `/rows` replaces the whole row, so for a CRM-added lead the reassign deleted
+  those calls. For every lead it also put the call-less copy back on the board,
+  and the next drag wrote that copy. From the user's side, an Inbound rep's
+  calls did not show in their results. The shape: **a whole-row write must
+  start from the last saved copy, never from the props the component mounted
+  with.** Any second writer of the same row (a drag on a board loaded before a
+  rep's call, two drawers open) still has this shape until the backend merges
+  `call_attempts` instead of replacing them.
+- **A logged interaction was credited to the firm's KAM, not to whoever logged
+  it** (fixed 2026-10-30). The KAM tab's Log an interaction modal set
+  `loggedBy` from its `kam` prop: the firm's KAM, or `KAMS[0]` when the firm had
+  none. So the Leadership Board's "credit the logger" rule never saw a logger.
+  Now it is the viewer. The shape: **an actor field is filled from the session,
+  never from the record being acted on.**
+- **The same KAM was two people because stored rows and the team spelled the name
+  differently** (fixed 2026-10-31). Rows hold the roster's short name ("Jadhav")
+  and the team table the full one ("Krishna Jadhav"). `sameRep` only allowed a
+  whole-word prefix, and several views compared with `===`. On a read-only copy of
+  production that person held 20 firms and 15 orders under the short name and 0
+  under the full one, so their own numbers, round robin's book size and any
+  filter built from the team disagreed with each other. `Vilok`/`Vilok Reddy`
+  and `Praful`/`Prafful Bhati` were the same. Now `sameRep` reads the roster's
+  `name`/`fullName` pair and every grouping uses it. The shape: **a person's name
+  is not a key. Compare through the one matcher, and build lists with `repNames`
+  so one person cannot appear twice.**
+- **Performance showed less KAM revenue than Overview for the same orders** (fixed
+  2026-10-31). A closed order imported with only an Enq ID has no value until
+  `resolveKamOrders` reads its ticket. Overview and the KAM tab did that; My
+  performance read the raw rows, so 5 closed orders counted ₹0 there until someone
+  happened to open the KAM tab. The shape: **when a value is filled in after
+  loading, every reader needs the step, not only the first two.**
+
+### An inner join on an optional key reads as "not onboarded" (2026-10-31)
+
+A firm with 8 logins on Studio Space showed "Not onboarded" in the CRM. Its
+registered number had lost its login link, as Studio does when a login's mobile
+changes and the old number has orders, and `GET /b2b/studio-access` inner-joined
+that link, so the row vanished with no error: a missing row is what "not on Studio
+Space" looks like. The deeper fault was asking a per-number question to get a
+per-firm answer. Fixing only the join left firms the CRM holds under another
+number, and a first pass here called one of them absent from the CRM because a
+name search missed a spelling, when its GSTIN matched. When a list means
+"everything X holds", check which rows the join key can drop, and reconcile against
+the source's own count by every key you have (`docs/b2b/studio-space.md`).
+
+### A reassign changed the system of record and left the copy the filter reads (2026-11-02)
+
+Moving a lead from Hardi to Vikas succeeded in Kylas, the log and the drawer, yet
+the lead stayed under Hardi's filter and came back there after a reload, so it
+looked unsaved. The filter ran on the CRM row, which keeps a copy of the owner,
+and only CRM-added leads wrote that copy. Under Vikas the row was filtered out
+before the Kylas merge, so a worked lead either vanished or appeared as a bare New
+lead with no calls, and saving that drawer would have overwritten the row's call
+log, because `/rows` replaces the whole row. 112 of 998 rows disagreed with Kylas.
+When two systems hold a field, filter after the merge, and write both on a move
+(`docs/b2b/inbound.md` §Who owns a lead).
+
+### A failed save closed the form first, so the rep lost what they typed at the site (2026-11-02)
+
+A rep at a site saved a new Outreach lead and got "Could not verify this session
+(500)". `/user-organisation/` had failed on Django, which is one thing. The form
+had already closed, because `onCreate` called `setCreating(false)` before the save,
+so every field was gone. Close a form after the save answers, and put the error
+inside it. `requireCaller` now also retries a 5xx (`docs/api-layer/context.md`).
+
+### "Assigned" counted every firm once the Client Database held firms nobody owned (2026-11-02)
+
+KAM's Assigned tile and "All KAMs" counted 1,285 firms when 158 had a KAM. Its lens
+was `return true` over the whole client list, which was right while every firm in
+the list came from a KAM handover and stopped being right the day 1,000+ firms were
+imported into the Client Database with no owner. The same tab had no viewer scope,
+so a KAM also saw every other KAM's book. When a list's source widens, re-check
+every predicate that was `true` because the old source was narrow
+(`docs/b2b/kam.md` §Who sees which firms).
+
+### A bulk GET over 4 KB came back as a bare 400 (2026-11-03)
+
+The Overview and Client Database showed "API error: 400 on /crm/leads/b2b-bulk/"
+on every open once the Client Database held 1,284 firms. `fetchB2BBulk` sent 300
+numbers and up to 60 enquiry IDs in one query string, about 4,100 bytes, and the
+server in front of Django refuses a request line over roughly 4 KB with an HTML
+400 before auth runs (a 4,040-byte query answered 403, a 4,060-byte one 400,
+checked without a token). Because the body is HTML, `mdFetch` had no message to
+show. The numbers in that batch read Unknown. `fetchB2BBulk` now sizes its first
+batch by bytes, not count (`BULK_QUERY_BYTES`). Any GET that packs a list into
+the URL (`enquiry_ids=`, `phones=`, `bm_groups=`) has the same ceiling: budget
+it in bytes.
+
+### One failed batch marked every firm Unknown, and a different failed batch read as Never ordered (2026-11-02)
+
+`fetchB2BBulk` read 300 numbers through `b2b-bulk` and the rest in further
+batches, and kept one `ok` flag for the whole set. That flag tracked only the
+first call, so its failure turned all 1,285 firms Unknown, including numbers a
+later batch had read. A later batch failing instead left `ok` true and zero-filled
+those numbers, so they read Never ordered, a failed request shown as data. A
+read that is batched records success per item (`unread`), never per call
+(`docs/b2b/client-db.md`).
+
+### A whole-row save let a stale copy erase a colleague's calls (2026-11-03)
+
+Every Inbound save sent the whole lead as the browser held it, and b2b-backend's
+`/rows` upserts every column, `extra` included. A drawer opened at 10:00 and saved
+at 16:00 wrote back the 10:00 call log, status and follow-up, erasing whatever a
+colleague logged in between. Reps reported it as "progress lost". Lead
+56525199 was last written at 16:42 IST on 2 Nov from a copy with no calls,
+status New and the old owner. There is no row history, so what it erased cannot
+be known. Saves now send a change (`inboundChange`), and lists only append
+(`docs/b2b/inbound.md` §The CRM owns a lead once it is imported). Any other
+pipeline that writes through `/rows` has the same shape until it does the same.
+
+### The Inbound board followed Kylas's owner, so a move inside Kylas took a rep's work off their list (2026-11-03)
+
+The board filed each lead under its live Kylas owner. Kylas moved worked leads
+back to Hardi with no CRM action: lead 56581783 had Vikas's Connected call, note and
+follow-up, then sat under Hardi 44 minutes later. Three more of his leads went the
+same way within 10 seconds of a CRM save. The data was intact, but Vikas's
+"Mine" list no longer showed it, which looks exactly like lost work. When two
+systems can both set a field, the screen must read the one the team controls.
+The row's owner is now the only owner (`docs/b2b/inbound.md` §The CRM owns a lead
+once it is imported), and the cause on the Kylas side is still unknown.
+
+### A KAM signed in on a number the team list did not hold, so the whole KAM tab read 0 (2026-11-03)
+
+Krishna Jadhav opened KAM on his own phone and saw "No clients are assigned yet",
+every tile at 0 and an empty order board, while production held 117 firms, 92
+handovers waiting for him and 15 orders. Nothing failed: every read answered 200.
+Django has two `b2b_KAM` logins for him, and he uses the one named "none". The team
+row and the handovers carried the other number, and the old rows said "Jadhav". So
+he matched by neither phone nor name, and the tab filtered to nothing. The
+header's "none" was the only clue on screen. The same code
+with the team row on his real number shows all 117 (`docs/b2b/kam.md` §Who sees
+which firms). Before suspecting the scoping code, compare the login's number and
+Django name with the team list. In Metabase, `user_organisation` joined to
+`users_user` gives every B2B-role login. On the same day three more `b2b_KAM`
+logins (Sai Suresh, Sidhant, Iliyas Kazi) had no team row at all.
+The guard is now the Team tab's Sign-in check, which listed "none" for that
+morning's team, and Change number, which carries a person's firms to their new
+number (`docs/b2b/sales-tab-redesign.md` §Sign-in check and Change number).
+
+### The round robin dealt leads the import never brought in, and failed on them every 5 minutes (2026-11-05)
+
+Team → Assign now read "Assigned 0 leads, 2 failed", with "Not imported into the
+CRM yet" on leads 39971691 and 49515900, and it said the same on every run. The two
+Kylas reads disagreed on which date makes a lead new. The pool takes Hardi's leads
+**qualified** in the last 7 days (`expectedClosureOn`). The import took only leads
+**created** after `B2B_FRESH_START` (26 Aug). Kylas had created those two in Nov
+2025 and Jun 2026, and Presales qualified them on 3 and 4 Nov. On 5 Nov, 5 of the
+101 pool leads had no CRM row, all created before 26 Aug. Each run claimed them,
+found no row and released them. The board would also have hidden them, because it
+floored rows on the same creation date. Now the pool reads the full lead, and
+each owner write carries a row built from it, so a lead with no row is inserted
+with its new owner (`docs/b2b/inbound.md` §Who owns a lead). The board no longer floors on
+creation. When two reads pick "new" by different dates, whatever one deals the
+other has to be able to hold.
+
+### A late answer for an earlier filter replaced the newer one on screen (2026-11-05)
+
+The user: changing filters often showed the wrong data, and the screen felt
+laggy. Three loaders set state from whichever request finished last. On the
+Overview, a slow month read landed after the one picked next and replaced it under
+the new month's name. Its `finally` also cleared the loading state while the
+newer read was still running. Inbound and Leads did the same on their filters.
+Inbound also re-read all of `/rows` (3.2 MB) for filters it applies in memory.
+The Overview also re-read every month uncached once Refresh had been pressed,
+because `fresh` was `refreshKey > 0`, which stays true. Now each loader applies only its newest request
+(`useMonthReport`, `latestLoad`), the Overview shows "…" rather than another
+month's figures, and Inbound's filters cost no request (`docs/b2b/inbound.md`
+§Only a search reaches the network). `useInboundAssigned` already had the right
+shape, a result keyed on its inputs, and is the one to copy. Any effect that
+fetches on a filter needs this guard.
+
+### A merged firm showed a rejection one of its source firms had received (2026-11-05)
+
+A parent firm was merged from three firms, all assigned to one KAM in the same
+second. The KAM accepted two and rejected one. The merge kept that KAM and kept
+all three entries, and the list reads the newest entry. With equal timestamps that
+was the rejection, so the parent read "<KAM> rejected: …" beside the same person
+as its KAM. A merge combines history, but the merged row's state must come from
+the merge onwards (`docs/b2b/client-db.md` §Merge).
+
+### Pausing a rep in the round robin left leads on the intake owner, because the import keeps Kylas's owner (2026-11-06)
+
+The user paused Hardi and still saw leads on her. The rotation itself honoured
+the switch: none of the 94 leads dealt while she was paused went to her. But the
+import inserts every Kylas lead under its Kylas owner, which is the intake user,
+and the rotation only dealt leads that a separate Kylas query returned (qualified
+in the last 7 days). 329 leads imported on 3 Nov were outside that query, so they
+sat on the intake owner, never called, whatever the switch said. Kylas showing her
+on everything made it look like the CRM was assigning to her. A lead's owner must
+be decided from the CRM's own rows, not inherited from the system it was copied
+from (`docs/b2b/inbound.md` §Why leads still read as Hardi's).
+
+### A settings row saved from a stale page switched a rep's round robin back on (2026-11-06)
+
+The Team tab saved a member by sending the whole row from the page's copy, so
+changing one checkbox re-sent every other field as the page last saw it. A page
+opened before someone else's pause would undo it on the next unrelated click. Now
+a row edit sends only the changed field and `saveMember` fills the rest from the
+stored row. Nothing kept history, so whether this is what re-enabled Hardi at
+08:04 UTC on 6 Nov is not known; the row now prints who changed it last. Same
+shape as the Inbound whole-row save (§A save sends a change, not a row).
+
+### A redirect card listed only what this session had sent, so every saved redirect read "not redirected" (2026-11-06)
+
+An Outreach BM sent a client to an EC, and the lead's drawer later said "Not
+redirected from here yet." The redirect was saved. The card's list was
+`useState([])`, filled only by its own submit, and it never read the stored
+rows, so any reload, any other person and any other team saw nothing. It also
+matched nothing across teams, because each drawer passed only its own record id.
+The card now loads every redirect whose `lead_ref`, `client_id` or any phone
+matches the record, and shows the cart and order steps at that EC
+(`docs/b2b/ec-directed.md` §Every redirect shows on the client). The shape to
+watch for: a list seeded empty and appended to on save looks right the moment
+you test it, and is wrong from the first reload.
+
+### A column the CRM stopped writing still held old values, so reading it again would have attached them to new dates (2026-11-06)
+
+On 2026-10-30 the follow-up time was dropped from the types and mappers, so the
+CRM stopped writing `follow_up_time`. It did not clear it. When the time came back
+on 2026-11-06, 18 real rows still held a bare `HH:MM`, some of them noise (00:29,
+02:56) and most under a follow-up date set since. Reading the column as it was would
+have shown a rep "call at 2:56 am" on a date they never gave a time for. The time is
+now stored as `<date>T<time>` and read only when the date matches
+(`docs/b2b/reminders.md`). When a field comes back, check what the backend kept
+while nothing was writing it, and tie a dependent value to the value it depends on
+rather than trusting the two to move together.
+
+### A firm's page said "No placed order" under numbers that each showed an order (2026-11-04)
+
+A manager opened a firm whose three numbers read "1 order", "1 order" and "0
+orders", and the Enquiries & orders card below said 0 orders, 1 open cart and 1
+lost. Production held two delivered orders and two PIs at Quote Approval Pending
+on those numbers. Nothing failed: the per-number counts come from
+`client-order-history`, which reads estimates, and the card comes from
+`/crm/leads/`, which lists only Django deal tickets. None of those four estimates
+had a deal ticket, so the card could not see them and its empty text claimed
+something false. The shape is two reads of "orders" with different roots shown
+on one screen. Before trusting an empty list, compare it with a figure on the same
+page. The card now names the orders it cannot list (`docs/b2b/client-db.md`
+§The Firm page lists deal tickets), and the real fix is `docs/backends.md` §Owed
+by Django row 18.
+
+### A Django ticket's owner and date on the enquiry card read as B2B attribution (2026-11-12)
+
+The user opened ENQ20261107102736 on a firm's page and asked why "Assigned to" was a
+Yelahanka salesperson and "Created" was 12 Aug, when a KAM had done everything. Both
+were right, about Django's deal ticket: the store opened it on the client's first
+visit in August, and the 7 Nov cart attached to it, built by the same salesperson
+(the sheet's EC SPoC process). The card printed them under B2B-sounding labels with
+nothing saying who the revenue went to. They now read **Ticket owner (store)** and
+**Ticket opened**, and **Revenue credited to** sits above them (`docs/b2b/client-db.md`
+§One enquiry). The shape: a field from another system shown beside your own data needs
+a label that names its system, or it will be read as yours.
+
+### My performance and the Overview counted revenue two different ways, so a rep's own figure never matched (2026-11-12)
+
+The Overview credits every placed order to a person through the number book. My
+performance counted Inbound's Closed leads and the KAM board's Closed orders, with a
+per-record `revenueCredit`. A KAM's store-booked orders were on the Overview under
+their name and nowhere on their own page, and a manager's credit on one screen never
+reached the other. Both now read `creditedOrders` over the same report, and a credit
+is per enquiry (`docs/b2b/leadership.md` §Revenue is the Overview's per-order rule).
+The shape is the "one number, one function" rule across two tabs, not two tiles: when
+two screens show "revenue" for one person, they must call one function.
+
+### A rep whose Django name differs from the team list earned ₹0 on every cart they raised (2026-11-14)
+
+The user: Krishna Jadhav sells and his My performance revenue never moves. Order rows
+name the cart's rep only by Django's `f_name l_name`, and his login is named "none"
+(`docs/backends.md` §Owed by Django row 15). The classifier matched reps by name, so
+his own carts went to a person called "none", and nobody's card claims "none". The
+CRM had already fixed his B2B tab by matching the sign-in number on 3 Nov. The revenue
+report, a second reader of the same identity, still matched by name. It now aliases a
+Django name to the team member whose number that login holds
+(`docs/b2b/overview.md` §Four revenue channels). The shape is
+`docs/landmines.md` §the KAM login-number entry again: every place that turns a
+Django user into a B2B person must go through the number, not only the first one fixed.
+
+### A column that shows only hand-logged values reads empty when nobody logs, and its filter matches nothing (2026-11-14)
+
+The Client Database's EC SPoC column showed a name only when a manager had logged one.
+Production had none logged, so all 1,261 firms read "Not logged" and typing "ha" in its
+filter returned 0 firms, while the Firm page showed a store rep for the same firm. The
+user read it as a broken filter. The list now falls back to the store rep on the firm's
+last order at an EC (`docs/b2b/client-db.md` §Choosing the list's columns). The shape:
+a list column and the detail page must derive a field the same way, or the list reads
+as missing data the page plainly has.
+
+### A KPI that reads only the receiving team's rows misses every hand-off that team has not picked up (2026-11-14)
+
+The user, for Vikas: leads he qualified for Outreach do not show on his Qualified tile.
+It read 0 with "+2 not counted", while he had sent ten leads since 30 Oct. The KPI walked
+Outreach rows with an intake link, so a lead still in Outreach's unassigned pool (four of
+his) and a lead a BM had re-entered by hand as Own research (two, which `inboundPool` then
+hides by phone) did not exist for it. It also judged "converted" on the Outreach row
+alone, so two hand-offs Inbound itself had closed read "0 of 2 follow-ups". It now
+starts from the sender's own leads (`docs/b2b/leadership.md` §KPI rules). The shape: a
+hand-off KPI must start from the sender's records, because the receiver's table only
+holds what the receiver has already acted on.
+
+### A KPI that asks for what the screen never lets you enter scores everyone at zero (2026-11-14)
+
+The user, on Hardi's My performance: CRM adherence read **0% (0 of 46)** on a day
+she logged 47 calls, and reps are judged on it daily. The Inbound rule demanded a
+note on every call, but the RNR button saves with no note field. It demanded a status
+past New, but an RNR leaves a New lead at New by design. It demanded firm, segment and
+city for clients who never picked up, and read the contact name from Kylas only, not
+from the drawer's field. Outreach had the same shape: role, team size, client type and
+office address on leads not yet visited, which the drawer itself asks for only at the
+visit. Both now ask only for what could have been captured
+(`docs/b2b/leadership.md` §KPI rules, `docs/b2b/outreach.md`): Hardi 0% → 91%,
+pratham 73% → 100%, on the same production rows. The shape: before scoring a field,
+find the control that captures it and the moment it appears, and check the KPI reads
+the field that control writes.
+
+### A lead the import's date floor skipped cannot be reassigned, and Sync never fixes it (2026-11-16)
+
+The Inbound drawer's Reassign said "That lead is not in the CRM yet. Sync from Kylas,
+then try again." and Sync from Kylas did nothing for it, however many times it ran.
+The lead was created in May, before `B2B_FRESH_START`, and a rep who has since left
+still held it in Kylas. The import takes only leads created after the floor, the
+round robin deals only the intake owner's, and Mandeep's 14 Nov move covered CRM rows
+only, so no path ever created its row, and Reassign refused without one. The shape: a
+guard that says "sync first" when no sync can satisfy it. `reassignInboundLeads` now
+reads the missing leads from Kylas in one `in` search and inserts their rows as part
+of the owner write (`docs/b2b/inbound.md` §The CRM's owner is written to Kylas). Check
+any "try X again" message for a path that can actually make X true.

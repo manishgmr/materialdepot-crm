@@ -1,0 +1,409 @@
+*Part of `docs/b2b/context.md` — see that file for the module overview.*
+
+## The KAM module: clients and orders are two things now
+
+`components/b2b/models/kam/` implements `KAM_Module_PRD.docx` v1.0 (KK).
+`components/b2b/views/kams/index.tsx` is the tab, rebuilt around it.
+
+§7 says the module "shares its client universe with the Client Database", so an
+assigned client IS a `ClientEntity` and §3's interactions live on that record.
+This module owns exactly one stored thing: the **Active Order**, still the same
+`pipeline='kam'` rows — 30 of them, live, split between two KAMs who are
+actually using them.
+
+Opening a client opens the shared Firm page (`components/b2b/drawers/firm/`,
+see `client-db.md`). `views/kams/drawer.tsx` only adds the KAM-only sections:
+calls and meetings, the KAM pipeline and escalations. So a number or GSTIN
+added on either tab shows on the other, because both edit the same client row.
+
+### The old board's seven stages, mapped on READ
+
+`normalizeKamOrderStatus` is load-bearing, not a courtesy — nothing is rewritten
+in place, so the board is correct whether or not any row is ever re-saved:
+
+| Stored (live count) | Reads as |
+|---|---|
+| `No Active Enquiry` (1) | `Requirement Logged` |
+| `Quote Approval Pending` (3) | `Quote Shared` |
+| `PI Shared` (0) | `PI Shared` |
+| `Awaiting Payment` (0) | `PI Shared` — the PI is out and the money is not in; the PRD has no payment state |
+| `Order Placed` (16) | `Closed` — §5.2 defines Closed as "once the order is placed" |
+| `Closed` (9) | `Closed` |
+| `Lost` (1) | `Lost` |
+
+`Requirement Logged` is a fifth status the PRD does not name and cannot avoid:
+§5.1 has a KAM type a requirement and an estimate at creation, and §5.2's
+earliest status already asserts a quote went out. One live row is in exactly
+that condition. Same reasoning as Inbound's `New` and Outreach's `Scheduled`.
+
+### This was the third board counting a typed guess as revenue
+
+`b2b_lead.value` on a KAM row was a figure a KAM typed on the old form, and
+`analytics.ts` had to **exclude the whole `Order Placed` column from revenue**
+to avoid reporting invented money off the 16 auto-advanced rows. Now:
+`KamOrder.estimatedValue` is the §5.1 estimate (legacy `r.value` migrates into
+it on read, and the fallback must never be removed — it is the only figure 30
+live rows carry), `orderValue` comes from the deal ticket via `lookupEnqId`, and
+`value` — the column analytics sums — is `orderValue || 0`. **Do not put a typed
+figure into `value`.** That is what makes collapsing `Order Placed` into
+`Closed` safe.
+
+**Consequence worth knowing before someone reports it as a bug:** a closed order
+whose Enq ID has not resolved contributes ₹0 revenue. On the KAM tab
+`resolveKamOrders` fetches and PERSISTS the values on load; Overview resolves
+for DISPLAY only and states how many are unresolved beside the revenue tile, and
+My performance resolves for display too (2026-10-31). One writer, two readers —
+deliberately, because two surfaces writing the
+same rows on load is how the duplicate auto-advance note below got written.
+
+### Auto-advance now keys on the order's own ticket
+
+`components/b2b/models/kam/auto-stage.ts` still moves an order forward off its deal status, forward-only,
+never out of Closed/Lost. What changed is rule 3: it matches the order's **own**
+Enquiry ID exactly, where it used to key on `furthestStatus` for the client's
+PHONE — a lifetime figure across every deal that client ever raised. On the old
+one-row-per-client board that was coarse; now that a client holds several orders
+it is wrong, and one closed order would advance every other open order on the
+account. An order with no Enq ID is left alone and the UI says so. Verified
+live: `RK Interiors` did not advance despite its phone carrying a Delivered
+ticket, because the order stores no Enq ID.
+
+The audit note is also no longer written twice. The old code reasoned that
+storing the new stage made a repeat impossible; live row
+`KAM-1787743441579-4` carries `"Auto-advanced PI Shared → Order Placed (cart
+status: Delivered)"` **twice**, because the write that would have prevented the
+second was fire-and-forget and its failure invisible. Now the caller awaits every
+write and reports failures, and an identical consecutive note is not re-appended.
+
+### Gates: two hard on an order, two hard on an interaction
+
+`kamOrderGateErrors` blocks exactly what §5.2 writes the word "Requires"
+against — an Enq ID on `PI Shared`, a lost reason on `Lost`. Note this differs
+from the Outreach board, which soft-gates the Enq ID: that PRD only says the
+value is auto-fetched, this one says *requires*. Hard-gate what a document
+names as required, and no more.
+
+`interactionGateErrors` hard-blocks a next follow-up date on a logged **Call**,
+because §4.1 says one "is required … before it can be saved". Scoped to a call,
+which is the word the document uses; a meeting is prompted instead, since a site
+visit ending in "we'll call when the drawings land" has no honest date to give.
+
+**Revenue credit is per enquiry (2026-11-12).** A KAM's revenue is every placed
+order the Overview credits to them, not the KAM board's Closed orders
+(`leadership.md` §Revenue is the Overview's per-order rule). A manager moves one
+order to anyone on the team from the enquiry card, the order modal or the Overview
+drawer (`order-credit/ui/credit-line.tsx`, `overview.md` §A manager credits one
+order). The per-record `revenueCredit` of 2026-10-30 is gone; production held none.
+
+**Enquiry is a third interaction type (2026-10-30).** It is the client asking
+for something. It needs what they asked for and a next follow-up date, the same
+as a call. KPIs count interactions by exact type, so an Enquiry adds to neither
+Calls nor Meetings. Interactions are a JSON column, so no migration was needed.
+
+**A Meeting needs its minutes (2026-10-29).** The user asked that every
+meeting a KAM or an Outreach BM has with a client carries a summary/MOM, so a
+`Meeting` with an empty summary is refused and the field reads "Minutes of
+meeting \*". A Call keeps the soft "No summary" prompt, because the ask was
+about meetings. Outreach already hard-gated notes on a held meeting
+(`outreach.md` §Meetings: notes and who was met are hard gates), so this
+brings KAM level with it. Meetings logged before this have no minutes, and
+the KAM KPI rows still say "No notes" for them rather than hiding them.
+
+An order's requirement keeps its earlier versions when edited
+(`data-layer.md` §Requirement history).
+
+### §4.3's "actioned" needs no new field
+
+A follow-up is actioned when a LATER interaction is logged, because
+`nextFollowUp` reads the account's follow-up date off the **latest** entry
+(deliberately not the earliest across the log — a follow-up set in March and
+superseded in April is not still pending). So a firm leaves the Overdue tile the
+moment the KAM logs the call, and nothing is ticked off by hand. Verified live.
+
+Open question #3 (a floor on the queue) is answered no — an old unactioned
+follow-up sits there indefinitely, because dropping it is how an account goes
+quiet with nobody deciding to let it. `queueAgeBand` marks the age instead.
+
+### The tiles are the navigation (2026-10-28)
+
+Same design as Inbound (`inbound.md` §The tiles are the navigation), on the
+shared `components/b2b/ui/lens-tiles.tsx`. Each tile is a lens. `firmLensMatches`
+and `orderLensMatches` in `models/kam/cadence.ts` give both its count and its
+list. On 2026-10-28 every tile matched its rows in a browser on real Supabase
+data, with Django stubbed.
+
+- **Follow-ups:** Overdue · Due today · No follow-up · Called today.
+  **Accounts:** Assigned · Active · Inactive 1 month · Inactive (see §Account
+  status). **Orders:** Open orders · Pipeline. Upcoming and Order board are
+  pills. The four follow-up buckets
+  partition the book: 9 + 2 + 44 + 11 = 66 firms on that day.
+- **They replaced the `KAM_VIEWS` chips**, which listed the same four things as
+  the tiles under different names and counts. The Assigned Clients chip counted
+  `filteredRows` (after search) while its tile counted `rows`, so the two
+  disagreed as soon as anyone searched (see the badge entry in
+  `docs/landmines.md`). `todaysCalls`, `followUpQueue`, `CadenceList`,
+  `CadenceRow` and `KamView` are deleted. The follow-up rule now lives in one
+  helper, `firmFollowUp`, which `assignedClientRows` and `callCompliance` (and
+  so the KAM dashboard) also read. `calledOn` does the same for calls.
+- **Open orders and Pipeline are different sets on purpose.** Open is
+  `KAM_OPEN_STATUSES`, which includes Requirement Logged. Pipeline is
+  `KAM_PIPELINE_STATUSES` (Quote Shared and PI Shared), the §6.1 definition.
+  Pipeline's tile shows the ticket value with the estimate beside it, never
+  summed.
+- **Overdue stays oldest-first** (§4.3 FIFO). Its age chip counts days past the
+  follow-up date, the same number the old queue's `agedDays` showed, banded by
+  `queueAgeBand`. It is not days since contact. Inactive 1 month sorts by
+  `daysToLapse`, closest to 60 days first, and No follow-up puts the longest silence first. Assigned
+  keeps the old order: overdue, then due, then the rest by silence.
+- **Called today counts firms in scope**, so on "All KAMs" it now includes an
+  unassigned firm someone called. `callsLoggedOn` itself is unchanged (one per
+  firm per day, for that KAM).
+- **Search reaches orders too**, by company, Enq ID and requirement, so the
+  order tiles narrow with the firm tiles.
+- **A failed read shows Unknown, never 0.** The client master failing blanks the
+  firm tiles, and the order list failing blanks the order tiles, independently,
+  each with a retry panel. Firms whose order metrics were not read reach neither
+  any status tile (`clientStatus` gives Unknown), and the Assigned and
+  Active tiles say how many.
+- **Against the Django stub every firm reads Inactive with ₹0.** The stub
+  answers `200 []` for `b2b-bulk`, so this says nothing about real accounts.
+
+### Who sees which firms (2026-11-02)
+
+- **A rep sees only their own book.** Not a manager (`viewer.isManager`): firms
+  where `ownsFirm` holds (the latest assignment's KAM phone when it names the
+  firm's KAM, else `sameRep` on `kam`, so "Jadhav" rows are Krishna Jadhav's) and
+  orders whose `kam` is them. No KAM picker. Screen-only, like every B2B scope.
+- **Assigned means a firm has a KAM.** Since the 1,000+ firm import
+  (`client-db.md` §The client_master import) most Client Database firms have no
+  KAM. "All KAMs" and every tile count only firms with one; a manager reaches
+  the rest under "No KAM yet". On 2026-11-02 production had 1,285 firms, 158 with
+  a KAM (Krishna Jadhav 117 with the "Jadhav" rows, Tharun 27, Sai Suresh 8,
+  Hardi 5, Vilok 1).
+- Checked in the dummy CRM (:3100) as the KAM, Outreach and manager personas.
+- **Who "me" is comes from the login number, through the team list.** The
+  viewer's B2B team row is found by the phone they signed in with, and its name
+  is what the name match uses. Django's own name for the login is used only when
+  no team row matches, and Django can hold a placeholder there ("none"). So a team
+  row on a number the person does not sign in with leaves them with an empty tab,
+  every tile at 0 and no error (`landmines.md`, the KAM login-number entry).
+- **An empty tab says why (2026-11-03).** A rep not on the KAM team is told the
+  name and number they signed in with, and that a manager adds that number under
+  B2B → Team. A KAM with nothing assigned is told a manager assigns firms here.
+  A manager with no KAM'd firm is pointed at "No KAM yet". The old banner told
+  everyone to "seed" the Client Database, which was true of none of them.
+- **Krishna Jadhav is one person on the number ending 810 (2026-11-03).** Django
+  has two `b2b_KAM` logins for him: ...807 named "Krishna Jadhav", which he does
+  not use, and ...810 named "none", which he does. The team row and all 92 pending
+  handovers carried ...807, and 25 firms, 15 orders and his logs said "Jadhav".
+  On the user's word they were merged onto ...810: owners, assignment KAM and phone,
+  `loggedBy`, note authors and Outreach/Inbound `kam` now read "Krishna Jadhav",
+  the ...810 team row was added with the same Kylas user, and the ...807 row is
+  inactive (the team route has no delete). 138 rows, written through
+  `/rows/{id}/change`; production read back 117 firms, 92 pending on ...810, 15
+  orders, nothing left on "Jadhav" or ...807. The roster keeps `Jadhav` as an alias,
+  because free-text notes and the legacy target key still say it. The Django
+  side is still owed (`backends.md` §Owed by Django row 15).
+
+### Account status: months since the last order, every firm (2026-11-06)
+
+**Replaced the 30 / 60-day rule on 2026-11-06**, at the user's ask, so firms can
+be targeted and handed to KAMs by how long they have been quiet. The bands are
+`ORDER_BANDS` (`constants/client.ts`): **Active** 0–30 days, **Inactive 1–3
+months** 31–90, **Inactive 3–6 months** 91–180, **Inactive 6–12 months** 181–365,
+**Inactive 12+ months** after that. Never ordered and Unknown are unchanged. The
+user listed four bands; 12+ was added so every firm with an order lands in one.
+It stayed one rule for every firm, so KAM moved too: its "lapsing" tile is
+Inactive 1–3 months (days to 90), and its "Inactive 3+ months" tile is the three
+longer bands (`LONG_INACTIVE`). `daysToLapse` still only counts down for Active
+and Inactive 1–3 months. The history below explains why the rule is shared.
+
+#### The 30 / 60-day rule it replaced (2026-10-29)
+
+The user set this rule for KAM in the morning and, the same evening, asked for
+it on **every firm**. So there is one rule again: `clientStatus`
+(`models/client/rules/status.ts`), used by KAM, Client Database, the Dashboard
+and Leadership. Client DB's old 3-month window and its "Lapsing soon" tile are
+gone; its middle tile is now Inactive 1 month, the same set as KAM's.
+
+`clientStatus` counts days since
+`lastOrderPlaced`. **Active** is 0–30 days, **Inactive 1 month** is 31–60 days,
+**Inactive** is more than 60 days, and **Never ordered** is no order on record
+for any of the firm's numbers. **Unknown** means the history was not read.
+Never ordered was split out of Inactive on 2026-10-30: the user's definition
+of Inactive is a firm whose last order is over two months old, and 20 of 35
+"Inactive" Client DB firms had never ordered at all. It has its own tile on
+KAM and Client Database, and its own segment on the Overview strip. Checked at each boundary in Node.
+`daysToLapse` gives the days left before a firm drops to the next bucket. It
+drives the "Lapses in" column and the pill's "Nd left".
+
+Everything KAM reads it: the tab's tiles, the Firm page opened from KAM (through
+`statusScale`), and the B2B Overview's KAM desk and Needs attention list (`overview.md`). Those
+now treat at-risk as **Inactive 1 month with no
+follow-up or an overdue one**, counted in days to 60. It also feeds the
+Leadership Board's KAM coverage denominator (`leadership.md`). The old At risk
+tile is gone: it was "Active, within 30 days of the 3-month cutoff", and the
+middle bucket replaced it. A future-dated `lastOrderPlaced`, from the b2b-bulk
+bug, reads Unknown since 2026-10-30 (it read Active before; `client-db.md`).
+
+### No header actions (2026-10-29)
+
+Export, Upload Orders and + Add Order were removed from the tab header at the
+user's request. An order is now added only from a firm's page (`drawer.tsx`
+`onAddOrder`), so every new order carries a `clientId`. The header button had
+created orders with no client, which is what the board's "unlinked" count
+reports. The CSV order importer (`views/kams/upload.tsx` and its validator in
+`io/kam-import.ts`) went with it. That file keeps only the cell, phone and
+delimiter parsing that the Client Database import still uses.
+
+### Admin assigns firms, the KAM signs off (2026-10-29)
+
+An admin selects firms in the Client Database (one or many) and assigns them to
+a KAM, either by name or round robin. The KAM accepts or rejects from the
+**Waiting for sign-off** tile here (`panels/signoff.tsx`).
+
+- **The handover lives on the latest `assignments` entry**, as `status`,
+  `how`, `kamPhone` and `respondedAt/By`. There is no new meta
+  key. `assignments` is a real `b2b_client` jsonb column on the deployed
+  backend. A new key would only persist once migration 0020's `extra` column
+  ships, and until then it would be dropped silently. `firmHandover()` reads the
+  latest entry only, **and on a merged firm only entries from its latest merge
+  on** (`currentAssignments`, 2026-11-05; `client-db.md` §Merge).
+  `ownsFirm` still reads every entry, because `kamPhone` there is what tells a
+  KAM's two logins apart. **The Firm page's KAM picker goes through the same
+  sign-off**: it is shown to managers only (`assignAs`), assigning there appends
+  a `Pending` entry, and setting Unassigned appends one with no `status`, which
+  ends any pending handover. Before this, any KAM could reassign a firm from
+  its page and skip the sign-off entirely.
+- **A pending firm already has `kam` set.** It counts in that KAM's book, tiles
+  and coverage from the moment it is assigned, so a KAM cannot shrink their
+  book by leaving it unanswered. Client DB also gets an **Awaiting KAM** tile while any firm is pending.
+- **A KAM accepts or rejects (2026-11-03).** The user asked for Reject back so a
+  KAM can turn down a firm and the admin reassigns it. Reject needs a reason,
+  which Client DB shows under the KAM column as "X rejected: reason".
+  `rejectFirmHandover` hands the firm to the previous holder: the latest earlier
+  entry with no status or `Accepted`, skipping any for the same person
+  (`sameRep`), so "Jadhav" never gets a firm back from "Krishna Jadhav". With no
+  earlier holder it goes to No KAM. This is what makes Reject safe now. The
+  31 Oct version cleared `kam` on every reject, and a test showed a rejected move
+  leaving an active client with no KAM, which is why Reject was removed that day.
+  On production on 3 Nov, 91 of the 92 pending firms had no earlier holder, so a
+  reject sends them to No KAM. The Outreach-to-KAM handover has its own Reject,
+  unchanged.
+- **Assigning a firm to the KAM who already holds it is refused.** It used to write
+  a pending entry and put the firm back in sign-off for nothing. The bar says it is
+  already with them, and the Firm page closes the picker. Both compare with
+  `sameRep`, so "Jadhav" and "Krishna Jadhav" count as one person.
+- **Round robin uses book size, not `fetchKamLoad`.** It picks the active,
+  in-rotation KAM holding the fewest firms right now, ignoring the firms being
+  moved, and ties go by name. `/kam-load` counts converted Inbound and Outreach
+  leads. It answers a different question (who got the most new conversions), and
+  it costs a request. Book size comes from the list already loaded.
+- **Who may answer:** the KAM it was assigned to (phone, normalised, then name),
+  a manager, or anyone while the team table is not live. **A KAM's sign-off tile
+  and list hold only the firms they may answer**, so every other KAM sees 0
+  rather than a list of "Waiting on Krishna Jadhav" rows. A manager sees all. The 48-hour window
+  matches the Outreach handover (`HANDOVER_TAT_HOURS`). The tile counts those
+  past it.
+- **One bulk write.** An assignment is one `POST /rows/bulk` (`upsertClients`).
+  On failure nothing is assigned and the error says so. A partial set never
+  shows as done.
+
+### Per-PI follow-up and closure dates (2026-10-29)
+
+The user confirmed that every PI carries its own follow-up date and closure date.
+`KamOrder.followUpDate` (`meta.follow_up_date`, so it lives in the backend's
+`extra`) sits beside the existing `expectedClosure`. **Both are hard-gated at PI
+Shared**, and earlier open stages only get a prompt. The orders table has a
+Follow-up column ("3d late", "Today", or "Missing" on a PI), and the firm's
+order rows show both dates.
+
+**The follow-up tiles still count firms**, from the latest interaction's date.
+Making Overdue / Due today count PIs, or a firm whose PI is overdue, changes
+what those tiles mean, so it was left for the user to decide. A PI with an
+overdue date is visible in the orders table, not yet in the tiles. A PI Shared
+order saved before this has neither date and is refused on its next save until
+both are filled. That is intended.
+
+**An optional time (2026-11-06).** The interaction log and the PI modal take a
+time beside the next follow-up date (`nextFollowUpTime` on the interaction,
+`follow_up_time` paired with its date on the order). The tiles above still bucket
+by date. The time drives the Reminders tab, where both the firm's and each PI's
+follow-up show for the KAM (`reminders.md`).
+
+### A meeting starts with a check-in (built 2026-10-30)
+
+The user, 2026-10-30: a rep checks in on arrival with their exact location, and
+only then fills in what was discussed. **It is compulsory now.**
+That reverses the 2026-10-29 decision that a missing check-in would only be
+flagged.
+
+- **The flow:** "Check in at a meeting" on the firm drawer opens
+  `ui/check-in-capture.tsx`, which takes a high-accuracy GPS fix and saves a
+  `Meeting` interaction with `checkIn {lat, lng, accuracy, at, by}` and no
+  minutes. The drawer
+  then shows "Meeting in progress". **Add minutes** opens Log interaction on
+  Meeting, which completes that same interaction (`withInteraction` replaces it
+  by id) instead of adding a second one.
+- **The gate:** `interactionGateErrors` refuses a Meeting with no check-in when
+  its date is on or after `CHECK_IN_REQUIRED_FROM` (2026-10-31), so meetings
+  logged before the rule are not retro-blocked. A Call or Enquiry needs none.
+- **The photo was removed on 2026-10-31, the day it shipped.** The user dropped
+  it. The location is now the whole check-in. Rows saved while it existed may
+  still hold `photoUrl` in their meta; nothing reads it. Backend `POST
+  /b2b/check-in-photo` still exists and the CRM no longer relays to it.
+- **KPIs skip an open check-in** (`inProgress` in `performance/teams/kam.ts`)
+  until it has minutes, and the firm's next follow-up ignores it.
+- **Not built:** a check-in on the Client Database firm page (KAM's own drawer has it).
+
+### Calls are deduped per client per day
+
+`callsLoggedOn` counts distinct client+day, not interactions. This is a target a
+KAM is measured against, and the field apps in this stack have a documented
+habit of writing one event several times. Two genuine calls to one client on one
+day count once; the alternative is hitting the number by pressing Save twice.
+§4.1's target is reported, never enforced (open question #2) — measured, not
+policed.
+
+### §6, and which §6.2 additions were built
+
+§6.1's pipeline definition is applied to all three verticals, with the statuses
+each one counted printed on screen. Two rupee figures per tile — the deal-ticket
+`pipeline` and the reps' `estimatedPipeline` — **never summed**, because an
+order at Quote Shared has no ticket yet and the estimate is the only number
+there is.
+
+§6.2 is flagged in the PRD "for review rather than assuming they're wanted", so
+only the ones this module's own sections already promise were built: **Call
+Compliance** (§4.1's target, measured), **Account Temperature distribution** and
+**At-Risk Accounts** (§3.2 exists so a manager "can see at a glance which
+accounts are cooling off"), plus the **KAM Funnel**, which is the shape §6
+already asks for on the other two boards. The remaining six — Win Rate and
+Average Sales Cycle beyond the funnel's own, Lost Reason Breakdown, Segment-wise
+Revenue and New vs Repeat — are computed in `components/b2b/models/kam/`/`analytics.ts` but not
+rendered, awaiting KK's decision.
+
+The KAM funnel counts each order's CURRENT status ("standing here or beyond").
+Nothing in this stack records when an order passed through a status it has since
+left, so a true historical funnel cannot be built, and one that looked like it
+could would be wrong. Orders with no status date are reported as **untimed**,
+not counted into a range.
+
+Open question #6 (does KAM Pipeline include orders still open from the original
+handoff?) is answered by §6.1 itself — "split by source" means those belong to
+whichever board raised them; counting them here would count one order twice.
+
+Open question #5 (should objective signals feed Account Temperature?) — it stays
+the KAM's judgement, and `temperatureMismatch` names the contradiction beside it
+(a 9/10 on an account that has not ordered in 60 days, a 2/10 on one still
+buying). Reported, never overridden.
+
+### Verifying these two tabs without touching production
+
+`pipeline='client'` writes and the KAM board's own upserts were served by an
+in-browser shim during verification, with the Django host stubbed from a fixture
+built on the REAL Enq IDs stored on the live KAM rows. Every `pipeline='kam'`
+and `'inbound'` READ stayed live. Re-checked afterwards: 171 inbound / 30 kam
+rows with their original stage strings / 0 client rows, unchanged. If you repeat
+this, block non-client writes in the shim and re-query the table at the end —
+`tx=rollback` will not save you here.

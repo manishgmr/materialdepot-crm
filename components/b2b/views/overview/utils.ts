@@ -1,0 +1,46 @@
+'use client';
+
+import type { KamDashboard } from '../../models/analytics';
+import { KamDeskRow, MonthPace } from './types';
+
+export function monthPace(revenue: number, target: number, now: Date): MonthPace {
+  const day = now.getDate();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const daysLeft = daysInMonth - day;
+  const pct = (n: number) => (target > 0 ? Math.round((n / target) * 100) : 0);
+  return {
+    target,
+    revenue,
+    achievedPct: pct(revenue),
+    expectedPct: Math.round((day / daysInMonth) * 100),
+    projection: Math.round((revenue / day) * daysInMonth),
+    perDayNeeded: daysLeft > 0 ? Math.max(0, (target - revenue) / daysLeft) : 0,
+    daysLeft,
+    monthLabel: now.toLocaleString('en-IN', { month: 'long' }),
+  };
+}
+
+export function kamDeskRows(k: KamDashboard): KamDeskRow[] {
+  const calls = new Map(k.compliance.map((c) => [c.kam, c]));
+  const names = [...new Set([...k.spocSplit.map((s) => s.kam), ...k.compliance.map((c) => c.kam)])];
+  return names
+    .map((kam) => {
+      const s = k.spocSplit.find((r) => r.kam === kam);
+      const c = calls.get(kam);
+      return {
+        kam,
+        clients: s?.clients ?? 0,
+        active: s?.active ?? 0,
+        unknown: s?.unknown ?? 0,
+        openOrders: s?.openOrders ?? 0,
+        pipeline: s?.pipeline ?? 0,
+        revenue: s?.revenue ?? 0,
+        logged: c?.logged ?? 0,
+        callTarget: c?.target ?? 0,
+        overdue: c?.overdueFollowUps ?? 0,
+      };
+    })
+    .sort((a, b) => b.pipeline + b.revenue - (a.pipeline + a.revenue));
+}
+
+export const pctOf = (n: number, d: number): number => (d > 0 ? Math.round((n / d) * 100) : 0);

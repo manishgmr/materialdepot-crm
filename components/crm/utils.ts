@@ -1,0 +1,261 @@
+'use client';
+
+import { AppUser, Lead } from '../../types/crm';
+import { APPOINTMENT_TRACKER_ROLES, DEFAULT_ROLE_TABS, LOST_AGE_BYPASS_ROLES, MARK_LOST_BYPASS_SLUG, MIN_LOST_AGE_DAYS, PERMISSION_TAB_ORDER, ROLE_LABEL_OVERRIDES, ROLE_TABS, SITE_AUDIT_ONLY_ROLES, SITE_AUDIT_ROLES, STORE_DISPLAY_ADMIN_ROLES, STORE_DISPLAY_ADMIN_SLUG } from './constants';
+import { MainTab } from './types';
+import { B2B_SALES_ROLES } from '@/lib/b2b/team/constants';
+
+// `id` is the lead's business key (cart number, or the estimate's ENQ id) and the
+// APIs take it as such — but it is NOT unique per row: a client with several deal
+// tickets on one cart gets the same `id` on every row, so matching on it picks the
+// first one and edits land on a sibling. `ticketId` is the deal ticket's own pk and
+// is the only per-row identity. Fall back to id+phone only for a row that has no
+// ticket yet (a lead being created in the drawer).
+export const isSameLeadRow = (a: Lead, b: Lead): boolean => (
+  a.ticketId != null && b.ticketId != null
+    ? a.ticketId === b.ticketId
+    : a.id === b.id && a.clientPhone === b.clientPhone
+);
+
+export const findLeadRow = (leads: Lead[], target: Lead): Lead | undefined =>
+  leads.find((l) => isSameLeadRow(l, target));
+
+export const roleLabel = (role?: string | null): string => {
+  if (!role) return '\u2014';
+  return ROLE_LABEL_OVERRIDES[role] ?? role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+};
+
+export const defaultPermissionsForRole = (role: string): string[] => {
+  const tabs = new Set(defaultTabsForRole(role));
+
+  if (!SITE_AUDIT_ONLY_ROLES.has(role)) tabs.add('storeDisplay');
+  const slugs = PERMISSION_TAB_ORDER.filter(([, tab]) => tabs.has(tab)).map(([slug]) => slug);
+  return STORE_DISPLAY_ADMIN_ROLES.has(role) ? [...slugs, STORE_DISPLAY_ADMIN_SLUG] : slugs;
+};
+
+const defaultTabsForRole = (role: string): Array<MainTab> => {
+  let tabs: Array<MainTab> = ROLE_TABS[role] ?? DEFAULT_ROLE_TABS;
+  if (B2B_SALES_ROLES.has(role) && !tabs.includes('b2bSales')) {
+    tabs = [...tabs, 'b2bSales'];
+  }
+  if (!tabs.includes('ecB2bReferral')) {
+    tabs = [...tabs, 'ecB2bReferral'];
+  }
+  if (APPOINTMENT_TRACKER_ROLES.has(role) && !tabs.includes('appointmentTracker')) {
+    tabs = [...tabs, 'appointmentTracker'];
+  }
+  if (SITE_AUDIT_ROLES.has(role) && !tabs.includes('siteAudit')) {
+    tabs = [...tabs, 'siteAudit'];
+  }
+  if (['superadmin', 'admin', 'tech'].includes(role) && !tabs.includes('storeDisplay')) {
+    tabs = [...tabs, 'storeDisplay'];
+  }
+  return tabs;
+};
+
+export const resolveAllowedTabs = (user?: AppUser | null): Array<MainTab> => {
+  if (SITE_AUDIT_ONLY_ROLES.has(user?.role ?? '')) return ['siteAudit'];
+  const perms = user?.individualPermissions;
+  if (Array.isArray(perms) && perms.length > 0) {
+    const set = new Set(perms);
+    const tabs = PERMISSION_TAB_ORDER.filter(([slug]) => set.has(slug)).map(([, tab]) => tab);
+    return tabs.includes('ecB2bReferral') ? tabs : [...tabs, 'ecB2bReferral'];
+  }
+
+  return defaultTabsForRole(user?.role ?? '');
+};
+
+export const canAdminStoreDisplay = (user?: AppUser | null): boolean => {
+  const perms = user?.individualPermissions;
+  if (Array.isArray(perms) && perms.length > 0) return perms.includes(STORE_DISPLAY_ADMIN_SLUG);
+  return STORE_DISPLAY_ADMIN_ROLES.has(user?.role ?? '');
+};
+
+export const todayStr = (): string => new Date().toISOString().slice(0, 10);
+
+const daysSinceCreated = (createdAt?: string): number => {
+  if (!createdAt) return Infinity;
+  const created = new Date(createdAt);
+  if (isNaN(created.getTime())) return Infinity;
+  return Math.floor((Date.now() - created.getTime()) / 864e5);
+};
+
+export const canMarkLostByAge = (createdAt?: string, isAdmin = false): boolean =>
+  isAdmin || daysSinceCreated(createdAt) >= MIN_LOST_AGE_DAYS;
+
+export const canBypassLostAge = (user?: AppUser | null): boolean => {
+  const perms = user?.individualPermissions;
+  if (Array.isArray(perms) && perms.length > 0) return perms.includes(MARK_LOST_BYPASS_SLUG);
+  return LOST_AGE_BYPASS_ROLES.has(user?.role ?? '');
+};
+
+export const mergeLead = (existing: Lead, incoming: Lead): Lead => {
+  const merged: Lead = { ...existing };
+  const fields: (keyof Lead)[] = ['clientName', 'clientPhone', 'createdAt', 'assignedTo', 'branch', 'status', 'lostReason', 'cartItems', 'followUpDate', 'closureDate', 'clientType', 'propertyType', 'projectPhase', 'leadPriority'];
+  for (const f of fields) {
+    const val = incoming[f];
+    if (val !== undefined && val !== null && val !== '') (merged as any)[f] = val;
+  }
+  if (incoming.cartValue && incoming.cartValue > 0) merged.cartValue = incoming.cartValue;
+  if (incoming.architectInvolved !== undefined) merged.architectInvolved = incoming.architectInvolved;
+  const existingRemarks = existing.remarks || [];
+  const incomingRemarks = incoming.remarks || [];
+  const allRemarks = [...existingRemarks];
+  for (const r of incomingRemarks) {
+    if (!allRemarks.some((er) => er.ts === r.ts && er.text === r.text)) allRemarks.push(r);
+  }
+  merged.remarks = allRemarks;
+  const existingVisits = existing.visits || [];
+  const incomingVisits = incoming.visits || [];
+  const allVisits = [...existingVisits];
+  for (const v of incomingVisits) {
+    if (!allVisits.some((ev) => ev.date === v.date && ev.channel === v.channel)) allVisits.push(v);
+  }
+  merged.visits = allVisits;
+  return merged;
+};
+
+export const fmtINR = (n: number | null | undefined): string => {
+  if (n == null || isNaN(n)) return '₹0';
+  return '₹' + Number(n).toLocaleString('en-IN');
+};
+
+export const fmtDate = (d: string | null | undefined): string => {
+  if (!d) return '—';
+  const dt = new Date(d + 'T00:00:00');
+  return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+export const fmtTimestamp = (ts: string): string => {
+  const dt = new Date(ts);
+  return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) +
+    ' · ' +
+    dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+};
+
+const toExportDate = (d: string | null | undefined): string => {
+  if (!d) return '';
+  const m = String(d).slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(d);
+};
+
+export const csvEscape = (v: unknown): string => {
+  const s = v == null ? '' : String(v);
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+};
+
+export const leadToExportRow = (lead: Lead): string[] => {
+  const cartItems = Array.isArray(lead.cartItems)
+    ? lead.cartItems.map((c) => c.name).filter(Boolean).join('; ')
+    : (lead.cartItems || '');
+  const remarks = (lead.remarks || [])
+    .map((r) => `${r.text}|${toExportDate(r.ts)}|${r.author}`)
+    .join(';');
+  const visits = (lead.visits || [])
+    .map((v) => `${toExportDate(v.date)}|${v.channel}`)
+    .join(';');
+  return [
+    lead.leadId || lead.id || '',
+    lead.clientName || '',
+    lead.clientPhone || '',
+    toExportDate(lead.createdAt),
+    lead.assignedTo || '',
+    lead.branch || '',
+    lead.status || '',
+    lead.lostReason || '',
+    cartItems,
+    lead.cartValue != null ? String(lead.cartValue) : '',
+    toExportDate(lead.followUpDate),
+    toExportDate(lead.closureDate),
+    remarks,
+    visits,
+    lead.clientType || '',
+    lead.propertyType || '',
+    lead.architectInvolved ? 'yes' : 'no',
+    lead.projectPhase || '',
+    lead.leadPriority || '',
+    lead.ticketId != null ? String(lead.ticketId) : '',
+  ];
+};
+
+export const triggerDownload = (blob: Blob, filename: string) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+};
+
+export function effectiveLeadBranches({ branchFilter, userAllowedBranches, userAllowedBranchesLower }: {
+  branchFilter: string[];
+  userAllowedBranches: string[];
+  userAllowedBranchesLower: Set<string>;
+}): string[] {
+  const scoped = userAllowedBranches.length > 0;
+  const picked = scoped ? branchFilter.filter((b) => userAllowedBranchesLower.has(b.toLowerCase())) : branchFilter;
+  if (picked.length > 0) return picked;
+  return scoped ? userAllowedBranches : [];
+}
+
+export function bmsInBranchScope(crmUsers: AppUser[], userAllowedBranchesLower: Set<string>): string[] {
+  const inScope = userAllowedBranchesLower.size === 0
+    ? crmUsers
+    : crmUsers.filter((u) => {
+        const own = u.allowedBranches || [];
+        return own.length === 0 || own.some((b) => userAllowedBranchesLower.has(b.toLowerCase()));
+      });
+  return [...new Set(inScope.map((u) => u.name).filter(Boolean))].sort();
+}
+
+export function offScopeLeadBranches(leads: Lead[], effectiveBranches: string[]): string[] {
+  if (effectiveBranches.length === 0) return [];
+  const wanted = new Set(effectiveBranches.map((b) => b.toLowerCase()));
+  return [...new Set(
+    leads.map((l) => (l.branch || '').trim()).filter((b) => b && !wanted.has(b.toLowerCase())),
+  )].sort();
+}
+
+export function buildLeadsQuery({ bmNameToPhone, branchFilter, categoryFilter, priorityFilter, closureDateFrom, closureDateTo, createdDateFrom, createdDateTo, currentUser, debouncedCartValueGt, debouncedSearch, followUpDateFrom, followUpDateTo, personFilter, scopedBMs, statusFilter, taskFilter, userAllowedBranches, userAllowedBranchesLower }: {
+  bmNameToPhone: Record<string, string>;
+  branchFilter: string[];
+  categoryFilter: string[];
+  priorityFilter: string[];
+  closureDateFrom: string;
+  closureDateTo: string;
+  createdDateFrom: string;
+  createdDateTo: string;
+  currentUser: AppUser | null;
+  debouncedCartValueGt: string;
+  debouncedSearch: string;
+  followUpDateFrom: string;
+  followUpDateTo: string;
+  personFilter: string[];
+  scopedBMs: string[];
+  statusFilter: string[];
+  taskFilter: string;
+  userAllowedBranches: string[];
+  userAllowedBranchesLower: Set<string>;
+}) {
+  const branchCsv = effectiveLeadBranches({ branchFilter, userAllowedBranches, userAllowedBranchesLower }).join(',');
+  const people = scopedBMs.length > 0 ? personFilter.filter((name) => scopedBMs.includes(name)) : personFilter;
+  const bmCsv = people.map((name) => bmNameToPhone[name] || name).join(',');
+  const statusCsv = statusFilter.join(',');
+
+  return {
+    branch: branchCsv || undefined,
+    bm: bmCsv || undefined,
+    q: debouncedSearch || undefined,
+    status: statusCsv || undefined,
+    createdFrom: createdDateFrom || undefined,
+    createdTo: createdDateTo || undefined,
+    followupFrom: followUpDateFrom || undefined,
+    followupTo: followUpDateTo || undefined,
+    closureFrom: closureDateFrom || undefined,
+    closureTo: closureDateTo || undefined,
+    cartValueGt: debouncedCartValueGt ? Number(debouncedCartValueGt) : undefined,
+    ownerUserOrgId: currentUser?.role === 'sales' ? currentUser.id : undefined,
+    taskFilter: taskFilter || undefined,
+    category: categoryFilter.length ? categoryFilter.join(',') : undefined,
+    priority: priorityFilter.length ? priorityFilter.join(',') : undefined,
+  };
+}

@@ -1,0 +1,305 @@
+'use client';
+
+import { InboundDrawerFooter } from './footer';
+import { InboundDrawerHeader } from './header';
+
+import { InboundCallsCard } from './cards/calls';
+import { InboundClientCard } from './cards/client';
+import { InboundNotesCard } from './cards/notes';
+import { InboundOwnerCard } from './cards/owner';
+import type { TeamMember } from '@/lib/b2b/team/types';
+import { InboundPlacedUnderCard } from './cards/placed-under';
+import { Rep } from '../../models/outreach/intake';
+import { InboundAddedCard, InboundPresalesCard } from './cards/presales';
+import { withRequirementHistory } from '../../models/requirement';
+import { InboundRequirementCard } from './cards/requirement';
+import { GateField, InboundStatusCard } from './cards/status';
+import { InboundOutreachCard } from './cards/outreach';
+import { useCallLog } from './hooks/use-call-log';
+import { useInboundDetail } from './hooks/use-inbound-detail';
+
+import { OutreachReferral, PlacedUnder, clientSpocs, isCrmAddedLead, closureReadiness, enrichmentGaps, hasConnected, istToday, kylasClientTypeIsAmbiguous, statusGateErrors, withStatusStamps } from '../../models/inbound';
+import { InboundLead } from '../../models/mock-data';
+import { Spinner } from '../../ui/inbound-chips';
+import { SaveState } from '../../types/inbound-drawer';
+import { EnqLookup, inboundPhones, lookupEnqId, saveInboundLead } from '@/lib/b2b';
+import { hasTeamEdits } from '@/lib/b2b/mappers/inbound';
+import { OrderCreditLine } from '../../order-credit/ui/credit-line';
+import { RedirectToEc, openEnquiries, uniquePhones } from '../../ui/redirect-to-ec';
+import { SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+const GATE_TEXT: Record<GateField, string> = {
+  followUpDate: 'follow-up date',
+  enqId: 'Enq ID',
+  lostReason: 'lost',
+  invalidCalls: 'Log at least one call',
+  invalidReason: 'invalid reason',
+  invalidNote: 'invalid note',
+};
+
+const withContactDefaults = (l: InboundLead): InboundLead => ({
+  ...l,
+  primaryContactName: l.primaryContactName || l.contactName || undefined,
+  primaryContactPhone: l.primaryContactPhone || l.phone || undefined,
+});
+
+export default function InboundDrawer({
+  lead, onClose, onSaved, actorName, actorPhone, members, people, canReassign,
+}: {
+  lead: InboundLead;
+  onClose: () => void;
+  actorName: string;
+  actorPhone: string;
+  members: TeamMember[];
+  people: Rep[];
+  canReassign: boolean;
+  onSaved: (updated: InboundLead) => void;
+}) {
+  const [draft, setDraft] = useState<InboundLead>(() => withContactDefaults(lead));
+  const [save, setSave] = useState<SaveState>({ saving: false });
+  const [showGates, setShowGates] = useState(false);
+
+  const set = <K extends keyof InboundLead>(k: K, v: InboundLead[K]) =>
+    setDraft((d) => ({ ...d, [k]: v }));
+
+  const crmOnly = isCrmAddedLead(lead);
+  const saved = useRef(lead);
+  const clean = useRef(draft);
+  const fillFromKylas = useCallback((fill: SetStateAction<InboundLead>) => {
+    clean.current = typeof fill === 'function' ? fill(clean.current) : fill;
+    setDraft(fill);
+  }, []);
+  const detail = useInboundDetail(lead, fillFromKylas);
+  const today = istToday();
+
+  const withHistory = useCallback(
+    (next: InboundLead) => withRequirementHistory(saved.current, next, actorName, new Date().toISOString()),
+    [actorName],
+  );
+  const commit = useCallback((next: InboundLead) => {
+    saved.current = next;
+    clean.current = next;
+    setDraft(next);
+    onSaved(next);
+  }, [onSaved]);
+  const calls = useCallLog(() => saved.current, draft, actorName, actorPhone, withHistory, commit);
+
+  const dirty = useMemo(() => hasTeamEdits(clean.current, draft), [draft]);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const requestClose = () => (dirty ? setConfirmDiscard(true) : onClose());
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+
+  const connected = hasConnected(draft.callAttempts);
+  const readiness = useMemo(() => closureReadiness(draft, today),
+    [draft.stage, draft.leadCreatedAt, draft.callAttempts, draft.outreachReferral, today]);
+
+  const gateErrors = useMemo(() => statusGateErrors({
+    status: draft.stage,
+    followUpDate: draft.followUpDate,
+    enqId: draft.enqId,
+    lostReason: draft.lostReason,
+    invalidReason: draft.invalidReason,
+    invalidNote: draft.invalidNote,
+    calls: draft.callAttempts?.length,
+    connected,
+    readiness,
+  }), [draft.stage, draft.followUpDate, draft.enqId, draft.lostReason, draft.invalidReason, draft.invalidNote, draft.callAttempts, connected, readiness]);
+
+  const gaps = useMemo(() => enrichmentGaps(draft), [draft]);
+
+  const gateFor = (field: GateField): string | undefined => {
+    if (!showGates) return undefined;
+    return gateErrors.find((e) => e.toLowerCase().includes(GATE_TEXT[field].toLowerCase()));
+  };
+
+  const [enq, setEnq] = useState<EnqLookup | null>(null);
+  const [enqChecking, setEnqChecking] = useState(false);
+  const lastCheckedEnq = useRef<string>('');
+
+  const checkEnq = async (id?: string) => {
+    const want = (id ?? draft.enqId ?? '').trim();
+    if (!want || enqChecking) return;
+    setEnqChecking(true);
+    lastCheckedEnq.current = want;
+    const res = await lookupEnqId(inboundPhones(draft), want);
+    setEnq(res);
+    if (res.status === 'matched') {
+      setDraft((d) => ({
+        ...d,
+        orderValue: res.orderValue ?? 0,
+        orderValueSource: 'deal',
+        placedUnder: { ...(d.placedUnder || {}), bmName: res.bmName || d.placedUnder?.bmName },
+      }));
+    } else if (res.status === 'no-match') {
+      setDraft((d) => ({ ...d, orderValueSource: 'manual' }));
+    }
+    setEnqChecking(false);
+  };
+
+  useEffect(() => {
+    const cur = (draft.enqId || '').trim();
+    if (cur !== lastCheckedEnq.current) setEnq(null);
+  }, [draft.enqId]);
+
+  const setPlaced = (patch: Partial<PlacedUnder>) =>
+    setDraft((d) => ({ ...d, placedUnder: { ...(d.placedUnder || {}), ...patch } }));
+
+  const handleSave = async (extra?: Partial<InboundLead>) => {
+    if (save.saving) return;
+    if (gateErrors.length) { setShowGates(true); return; }
+    setSave({ saving: true });
+
+    const at = new Date().toISOString();
+    const toSave: InboundLead = withRequirementHistory(saved.current, withStatusStamps(lead, {
+      ...draft,
+      ...extra,
+      company: draft.companyName?.trim() || draft.company,
+      value: Number(draft.orderValue) || 0,
+      timeline: draft.urgency,
+      requirementBrief: draft.leadSummary,
+    }, at), actorName, at);
+
+    const res = await saveInboundLead(saved.current, toSave);
+    if (!res.lead) {
+      setSave({ saving: false, error: `Save failed: ${res.error}. Nothing was stored — try again.` });
+      return;
+    }
+    commit(res.lead);
+    setSave({ saving: false });
+    onClose();
+  };
+
+  const [summaryModal, setSummaryModal] = useState<{ loading: boolean; text?: string; error?: string } | null>(null);
+  const openCallSummary = async (callLogId: string) => {
+    setSummaryModal({ loading: true });
+    try {
+      const text = await detail.fetchCallLogSummary(callLogId);
+      setSummaryModal({ loading: false, text: text || 'No summary available for this call.' });
+    } catch {
+      setSummaryModal({ loading: false, error: 'Failed to load call summary. Please try again.' });
+    }
+  };
+
+  const spocs = useMemo(() => clientSpocs(draft, detail.outreach.data, detail.deals.data),
+    [draft, detail.outreach.data, detail.deals.data]);
+  const presalesTypeUnmapped = kylasClientTypeIsAmbiguous(draft.presalesClientType);
+
+  return (
+    <div className="fixed inset-0 z-[1200] flex justify-end">
+      <div className="absolute inset-0 bg-black/40" onClick={requestClose} />
+      <div className="relative w-full max-w-[780px] bg-[#F7F7F8] h-full overflow-y-auto shadow-2xl flex flex-col">
+        <InboundDrawerHeader draft={draft} gaps={gaps} onClose={requestClose} today={today} />
+
+        <div className="p-5 flex flex-col gap-4">
+          <InboundOwnerCard
+            draft={draft}
+            spocs={spocs}
+            spocsLoading={detail.outreach.loading || detail.deals.loading}
+            members={members}
+            canReassign={canReassign}
+            onReassigned={async (to) => {
+              const owned = { owner: to.name, ownerId: to.kylasUserId ?? undefined };
+              saved.current = { ...saved.current, ...owned };
+              clean.current = { ...clean.current, ...owned };
+              setDraft((d) => ({ ...d, ...owned }));
+              onSaved(saved.current);
+              return undefined;
+            }}
+          />
+
+          <InboundCallsCard
+            draft={draft}
+            calls={calls}
+            readiness={readiness}
+            onClose={(reason) => { setDraft((d) => ({ ...d, stage: 'Lost', lostReason: reason })); setShowGates(false); }}
+          />
+
+          <InboundClientCard draft={draft} presalesTypeUnmapped={presalesTypeUnmapped} set={set} />
+
+          <InboundRequirementCard draft={draft} set={set} />
+
+          <InboundStatusCard
+            checkEnq={checkEnq}
+            draft={draft}
+            enq={enq}
+            enqChecking={enqChecking}
+            gateFor={gateFor}
+            set={set}
+            setDraft={setDraft}
+            setShowGates={setShowGates}
+            deals={detail.deals}
+            readiness={readiness}
+            connected={connected}
+          />
+
+          {(draft.stage === 'PI Shared' || draft.stage === 'Closed') && (
+            <InboundPlacedUnderCard draft={draft} people={people} setPlaced={setPlaced} />
+          )}
+
+          {draft.stage === 'Closed' && !!draft.enqId && <OrderCreditLine enquiryId={draft.enqId} rule={draft.owner} />}
+
+          <InboundOutreachCard
+            draft={draft}
+            actorName={actorName}
+            today={today}
+            saving={save.saving}
+            onSend={(referral: OutreachReferral) => handleSave({ outreachReferral: referral })}
+          />
+
+          <RedirectToEc
+            firm={draft.companyName || draft.company}
+            contactName={draft.primaryContactName || draft.contactName}
+            phones={uniquePhones([draft.primaryContactPhone, draft.phone, ...(draft.additionalContacts || []).map((c) => c.phone)])}
+            sourceTeam="inbound"
+            leadRef={draft.id}
+            enquiries={openEnquiries(detail.deals.data)}
+            enquiriesState={detail.deals.loading ? 'loading' : detail.deals.failed ? 'failed' : 'ready'}
+          />
+
+          <InboundNotesCard draft={draft} calls={calls} />
+
+          {crmOnly ? <InboundAddedCard draft={draft} /> : <InboundPresalesCard
+            detailFailed={detail.detailFailed}
+            detailLoading={detail.detailLoading}
+            draft={draft}
+            presalesTypeUnmapped={presalesTypeUnmapped}
+            calls={detail.presalesCalls}
+            notes={detail.presalesNotes}
+            openCallSummary={openCallSummary}
+          />}
+        </div>
+
+        <InboundDrawerFooter
+          gaps={gaps}
+          gateErrors={gateErrors}
+          handleSave={handleSave}
+          onClose={requestClose}
+          save={save}
+          showGates={showGates}
+          discard={confirmDiscard ? { keep: () => setConfirmDiscard(false), discard: onClose } : null}
+        />
+      </div>
+
+      {summaryModal && (
+        <div className="fixed inset-0 z-[1300] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setSummaryModal(null)} />
+          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-[480px] mx-4 p-5">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[13px] font-bold text-gray-800">Call summary</span>
+              <button onClick={() => setSummaryModal(null)} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+            </div>
+            {summaryModal.loading ? <Spinner label="Loading summary…" />
+              : summaryModal.error ? <p className="text-[12px] text-red-500">{summaryModal.error}</p>
+                : <p className="text-[12px] text-gray-700 whitespace-pre-wrap">{summaryModal.text}</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

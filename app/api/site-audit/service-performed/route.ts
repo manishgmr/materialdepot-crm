@@ -1,0 +1,57 @@
+import type { NextRequest } from "next/server";
+import { MD_API_BASE_URL } from "@/lib/api/core/config";
+
+export const dynamic = "force-dynamic";
+
+const MD_API_BASE = MD_API_BASE_URL;
+
+const STAGE_REF = /^SO(\d+)-S(\d+)$/;
+
+export function stageIdFrom(po: unknown): number | null {
+  const candidates = Array.isArray(po) ? po : typeof po === "string" ? po.split(",") : [];
+  for (const raw of candidates) {
+    const m = STAGE_REF.exec(String(raw).trim());
+    if (m) return Number(m[2]);
+  }
+  return null;
+}
+
+export async function POST(request: NextRequest) {
+  let body: any = null;
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json({ ok: false, error: "invalid JSON body" }, { status: 400 });
+  }
+
+  const stageId = Number(body?.stage_id) || stageIdFrom(body?.po);
+  if (!stageId) {
+
+    return Response.json({ ok: true, skipped: "no OMS service leg on this order" });
+  }
+
+  const authHeader = request.headers.get("authorization");
+  try {
+    const res = await fetch(`${MD_API_BASE}/oms/stages/${stageId}/service-performed/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...(authHeader ? { Authorization: authHeader } : {}),
+      },
+      body: JSON.stringify({ notes: String(body?.notes || "").slice(0, 500) }),
+      cache: "no-store",
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      return Response.json(
+        { ok: false, stage_id: stageId, error: (data && data.detail) || `HTTP ${res.status}` },
+        { status: res.status },
+      );
+    }
+    return Response.json({ ok: true, stage_id: stageId });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "confirmation failed";
+    return Response.json({ ok: false, stage_id: stageId, error: message }, { status: 502 });
+  }
+}

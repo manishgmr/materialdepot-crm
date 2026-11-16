@@ -1,0 +1,89 @@
+import type { NextRequest } from "next/server";
+import { getCached, setCache, cleanup } from "@/lib/server/cache";
+import { rateLimitedFetch } from "@/lib/server/rate-limiter";
+import { KYLAS_API_BASE_URL } from "@/lib/api/core/config";
+
+export const dynamic = "force-dynamic";
+
+const KYLAS_API_BASE =
+  KYLAS_API_BASE_URL;
+
+export async function GET(
+  req: NextRequest,
+  ctx: RouteContext<"/api/deals/[id]">
+) {
+  const apiKey = process.env.KYLAS_API_KEY;
+  if (!apiKey) {
+    return Response.json(
+      { error: "KYLAS_API_KEY is not configured" },
+      { status: 500 }
+    );
+  }
+
+  cleanup();
+  const { id } = await ctx.params;
+  const cacheKey = `deal:${id}`;
+
+  const fresh = req.nextUrl.searchParams.get("fresh") === "1";
+  const cached = fresh ? null : getCached(cacheKey);
+  if (cached) return Response.json(cached);
+
+  try {
+    const res = await rateLimitedFetch(`${KYLAS_API_BASE}/deals/${id}`, {
+      headers: { "api-key": apiKey },
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      return Response.json({ error: text }, { status: res.status });
+    }
+
+    const data = await res.json();
+    setCache(cacheKey, data, 30_000);
+    return Response.json(data);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Upstream request failed";
+    return Response.json({ error: message }, { status: 502 });
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  ctx: RouteContext<"/api/deals/[id]">
+) {
+  const apiKey = process.env.KYLAS_API_KEY;
+  if (!apiKey) {
+    return Response.json(
+      { error: "KYLAS_API_KEY is not configured" },
+      { status: 500 }
+    );
+  }
+
+  const { id } = await ctx.params;
+  const body = await request.json();
+
+  try {
+
+    const res = await rateLimitedFetch(`${KYLAS_API_BASE}/deals/${id}`, {
+      method: "PATCH",
+      headers: {
+        "api-key": apiKey,
+        "Content-Type": "application/json-patch+json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      return Response.json({ error: text }, { status: res.status });
+    }
+
+    const data = await res.json();
+
+    setCache(`deal:${id}`, data, 30_000);
+    return Response.json(data);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Upstream request failed";
+    return Response.json({ error: message }, { status: 502 });
+  }
+}

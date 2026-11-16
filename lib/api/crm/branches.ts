@@ -1,0 +1,50 @@
+import { mdFetch } from '../core/client';
+import { kylasFetch } from '../core/kylas-client';
+
+export interface Branch { id: number; name: string; displayName: string }
+
+export async function fetchBranches(): Promise<Branch[]> {
+  const data = await kylasFetch("/fields/2215123");
+  return (data.field?.picklist?.values || [])
+    .filter((v: { deleted: boolean; disabled: boolean }) => !v.deleted && !v.disabled)
+    .map((v: { id: number; name: string; displayName: string }) => ({
+      id: v.id, name: v.name, displayName: v.displayName,
+    }));
+}
+
+export async function fetchBranchList(): Promise<import('../../../types/crm').Branch[]> {
+  const data = await mdFetch('/orgainsation-branch/');
+  return (data?.results || data || []).map((b: { id: number; branch_name: string }) => ({ id: b.id, name: b.branch_name }));
+}
+
+export async function addBranch(detail: Partial<BranchDetail> & { branch_name: string }): Promise<import('../../../types/crm').Branch> {
+  const data = await mdFetch('/orgainsation-branch/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(detail),
+  });
+  return { id: data.id, name: data.name || detail.branch_name };
+}
+
+export const BRANCH_DETAIL_FIELDS = ['branch_name', 'city', 'address', 'map_link'] as const;
+
+export type BranchDetailField = typeof BRANCH_DETAIL_FIELDS[number];
+export type BranchDetail = Record<BranchDetailField, string>;
+
+export async function fetchBranchDetail(id: string | number): Promise<BranchDetail> {
+  const data = await mdFetch(`/orgainsation-branch/${id}/`);
+  return Object.fromEntries(BRANCH_DETAIL_FIELDS.map((f) => [f, data?.[f] ?? ''])) as BranchDetail;
+}
+
+export async function saveBranchDetail(id: string | number, changes: Partial<BranchDetail>): Promise<void> {
+  await mdFetch(`/orgainsation-branch/${id}/`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(changes),
+  });
+}
+
+export async function deleteBranch(id: string | number): Promise<void> {
+  await mdFetch(`/orgainsation-branch/${id}/`, { method: 'DELETE' });
+}
+

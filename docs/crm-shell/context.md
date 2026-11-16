@@ -1,0 +1,228 @@
+# components/crm (app shell)
+
+**Covers:** `components/crm/** · lib/api/core/auth.ts · types/crm.ts`
+
+## Purpose
+The app shell: login, session restore, and the tab permission gate that decides which of the 16 main tabs a role can see.
+
+`remarksQuality` (2026-10-23) is the second tab whose slug is also enforced
+outside the browser — Django checks `crm.remarks_quality` on its endpoints and
+mirrors its `ROLE_TABS` entries for empty-list accounts; see
+`docs/remarks-quality/context.md`.
+
+## Auth, and why a fake session won't work
+
+Login is phone + OTP (`sendOtp` → `verifyOtp`), which stores `jwt_token` /
+`refresh_token` in localStorage; the identity itself lives in
+`localStorage.materialdepot_user`.
+
+**Any 401/403 from `mdFetch` calls `forceReLogin()`, which deletes
+`materialdepot_user` and reloads.** So hand-writing a session into localStorage
+to preview the app does not survive: `components/crm/index.tsx` calls `loginWithPhone()` on
+mount, that 401s without a real JWT, and you're bounced to the login screen.
+
+Two ways to see a real dashboard without an OTP:
+
+1. **`/site-audit-view?person=<profile-email>`** — never calls the Django
+   backend. The cheapest way to preview any Site Audit dashboard against real
+   data. It needs more than a `materialdepot_user` key existing, though: viewing
+   *someone else's* dashboard is gated on `isSiteAuditOversightRole`, which
+   accepts **only** `site_audit.admin` in `individualPermissions` — any other
+   `site_audit.*` slug renders "This preview is limited to Site Audit oversight
+   accounts." (hit 2026-09-23 with `site_audit.service_mgr`).
+2. **Stub the Django host only.** (A person signing in for real needs none of
+   this, only the right port: `api-dev2` answers CORS for `localhost:3000`,
+   `:3001` and `:5173` only, verified 2026-10-28, so on `:3100` every call is
+   "Failed to fetch". `npm run dev` pins `:3001`.) Monkey-patch `window.fetch` to intercept
+   `api-dev2.materialdepot.in` (return a token from `/verify-otp/`, a record
+   from `/crm/user-profile/`, a roster from `/user-organisation/`, and `200 []`
+   for everything else — never a 401, or `forceReLogin` fires), then drive the
+   login form. Every Supabase read stays live, so order/attribution numbers are
+   real. **Say explicitly which half was stubbed when reporting results.**
+
+React inputs here ignore synthetic `type` events; set values via the native
+`HTMLInputElement.prototype.value` setter + `dispatchEvent(new Event('input',
+{bubbles:true}))`.
+
+## Tab permissions (`components/crm/index.tsx`)
+
+`resolveAllowedTabs(user)` decides which tabs render:
+
+1. If `user.individualPermissions` is **non-empty** it is the WHOLE answer —
+   tabs come from `PERMISSION_TAB_ORDER`, and an absent slug means "no".
+2. Only if the list is empty/NULL: `ROLE_TABS[role]` (falling back to
+   `DEFAULT_ROLE_TABS`) plus the force-add sets (`B2B_SALES_ROLES` — which
+   lives in `lib/b2b/team/constants.ts`, because `app/api/b2b/*` gates on the
+   same set and cannot import this module's `'use client'` files,
+   `APPOINTMENT_TRACKER_ROLES`, `SITE_AUDIT_ROLES`, storeDisplay). This branch
+   is a **bootstrap for un-migrated accounts only**.
+
+**Four roles were added on 2026-09-12** — `team_leader`,
+`asst_store_manager`, `cluster_head` and `area_manager` — to `ROLE_OPTIONS`
+(so `RoleSelect` in Admin > Users offers them) and to `ROLE_TABS`. They are the
+middle of the store ladder in `docs/org-hierarchy/context.md`, and until then
+the CRM jumped straight from `sales` to `store_manager` to `manager`.
+**Whether the Django permission table accepts them is not verifiable from this
+repo.** `roleFromPermission` returns `permission_name` verbatim when it is a
+string, so the round trip works the moment Django knows the name, but
+`PERMISSION_ID_TO_ROLE` — the numeric fallback — stops at 15 and has none of
+them. Assigning one to a real account is the test; nothing here proves it.
+
+`reportCard` was added to `ROLE_TABS.sales` and `ROLE_TABS.store_manager` at the
+same time. Both were missing it, so the two roles whose SOP names the report
+card by name — "BM performance review" (checker TL) and "TL/AM performance
+review" (checker SM) — were the two roles that could not open the tab. **All of
+this only reaches accounts with an empty `individualPermissions`**, i.e. the
+bootstrap branch below; everyone already migrated needs `crm.report_card`
+granted under Admin > Users, which is an admin action and not a code change.
+`defaultPermissionsForRole` derives from the same table, so new accounts get the
+slug automatically.
+
+`permission_name` is an HR cost-centre label, not an access level — it says
+`tech` for a Service Manager and `admin` for Category/Delivery/Marketing staff —
+so nothing may be gated on it. Anything a role must guarantee has to exist as a
+slug on those people; **adding a role to a force-add set no longer reaches
+anyone who has a permission list**, which is nearly everyone. The 2026-08-20
+backfill wrote the slugs for every force-add set (see below).
+
+`?tab=` is validated against `VALID_MAIN_TABS` **and** clamped to the user's own
+tabs into `effectiveTab`; every render block keys off `effectiveTab`, never
+`mainTab`. Before that, only Admin and Appointment Tracker re-checked at render,
+so every other tab was reachable by typing its name.
+
+**One slug is now also checked outside the browser.** `crm.store_checklist` is
+re-evaluated server-side in `app/api/store-checklist/route.ts`, so revoking it
+takes the data away and not just the tab — every other slug here still gates the
+UI only, and hiding a tab hides nothing on the wire. The slug is exported as
+`CHECKLIST_PERMISSION_SLUG` from `lib/store-checklist/constants.ts` and imported
+into `PERMISSION_TAB_ORDER` rather than written twice, because a rename in one
+place would leave the route denying everyone. A tab whose backend must enforce
+the same rule should follow that shape; see `docs/api-layer/context.md`.
+
+`ecB2bReferral` (2026-10-31) is not gated: since 2026-11-03 `resolveAllowedTabs`
+appends it for every account but the site-audit-only roles, and
+`app/api/b2b/ec-referral/route.ts` only needs a session. The slug
+`crm.ec_b2b_referral` is still listed under Admin > Users but changes nothing
+(`docs/b2b/ec-referral.md`).
+
+`siteAudit` additionally force-adds off the caller's **Site Audit `profiles.role`**,
+which is fetched async — so that tab can appear a beat after the others. That is
+deliberate: caching it would keep showing a tab after a role was revoked in Site
+Audit > Users, and a failed fetch leaves the role `undefined` so the CRM role
+alone decides (a dropped request can never take a tab away). Nothing forces the
+user off a disallowed `?tab=`, so the late arrival can't bounce anyone.
+
+Tab render order is fixed by the literal array in the header JSX, not by the
+order tabs were resolved in.
+
+## The lead drawer re-resolves its row, and must do it by ticket
+
+`CrmModals` (`components/crm/shell/modals.tsx`) does not render `drawerLead`
+directly — it re-reads the row out of `leads` so the drawer follows later
+refreshes. That lookup used `l.id === drawerLead.id`, and a lead's `id` is the
+cart number, which every deal ticket on that cart shares: clicking the "In Cart"
+row opened a lost sibling instead. It now goes through `findLeadRow`/
+`isSameLeadRow` (`components/crm/utils.ts`), which match on `ticketId` and fall
+back to `id + clientPhone` only for a lead being created, which has no ticket
+yet. The two `setLeads` maps in `onImmediateSave` use the same helper — matching
+those on `id + clientPhone` wrote one date edit to every sibling row.
+
+The same rule binds the `DateEditPopup` beside it: the save handler resolves its
+row by ticket, but the popup's *pre-filled* dates come from a separate
+`findLeadRow` in `CrmModals`, and while that one matched on `id` the operator was
+editing against a sibling's values and saving them onto the right row. The
+drawer's remarks/visits effect in `components/crm/index.tsx` carries `ticketId`
+in its dependency array for the same reason — sibling rows share `id` **and**
+`clientPhone`, so without it, switching between two deal tickets on one cart
+never refetches and the drawer keeps the first row's remarks.
+
+
+## The Leads tab's Salesperson filter is branch-scoped, and the branch filter never widens
+
+`availableBMs` (`hooks/use-leads-view.ts`) used to be the entire
+`/user-organisation/` roster, so a store manager could pick a B2B rep — or
+anyone from another store — and get their carts under their own branch. It goes
+through `bmsInBranchScope` (`utils.ts`) now: a user is offered when the caller
+has no branch scope at all (admin, or the empty `allowedBranches` that means
+"all branches"), when the *user's* own `allowedBranches` is empty, or when the
+two lists overlap. `buildLeadsQuery` clamps `personFilter` to that same list
+before building `bm=`, so the dropdown and the request cannot disagree.
+
+`effectiveLeadBranches` is the one place that decides what `branch=` carries.
+**An empty result must never reach the wire** — `branch: '' || undefined` drops
+the param and Django then answers for every branch, which is the opposite of
+what a scoped user asked for. When the caller has allowed branches and their
+selection does not intersect them, it falls back to the caller's own branches;
+only a genuinely unscoped caller with nothing selected sends no `branch` at all.
+
+`leads/csv/actions.ts` builds its export query from `buildLeadsQuery` rather
+than repeating the derivation — it used to carry a second copy, which meant the
+export kept both holes after the tab was fixed.
+
+**`/crm/leads/` does not always honour `branch`.** Confirmed 2026-09-23 against
+production: carts owned by a B2B-only rep came back under a BASAVESHWARA NAGAR
+selection, and nothing in the Django schema links them to that store. Until the
+backend is fixed, `offScopeLeadBranches` compares each returned row's `branch`
+against the requested set and `LeadsPanel` renders an amber notice naming what
+leaked — the rows are still shown, because the stat cards above them are the
+backend's counts and silently dropping rows would make the two disagree. See
+`docs/landmines.md` for the full account and the Branch Access data fix that
+goes with it.
+
+**`b2b.manager`** (2026-10-28) is a sub-slug shown under B2B Sales in the Admin
+permission checklist, the same way Store Display's full-access slug is. It is
+additive to role: `isB2BManager` is true for `superadmin`/`admin`/`b2b_manager`
+**or** the slug, so an admin never has to tick it. It unlocks B2B Sales → Team
+and every rep's rows. `B2BSalesCRM` now receives `currentUser` from
+`tab-panels.tsx`; before that, nothing under `components/b2b/` knew who was
+logged in.
+
+**A B2B admin can also be made from B2B → Team (2026-10-29),** without any CRM
+role or slug: the per-member "B2B admin" switch (`b2b_team_member.is_admin`,
+b2b-backend migration 0021). The user's reason: some B2B people need to see
+the whole team's data without being admins of the CRM or of procurement. The
+B2B tab itself still comes from the role, as before. `viewerFor` splits the
+two powers: `isManager` (see every rep's data, assign work) is the role, the
+slug **or** that switch, while `canManageTeam` (the Team tab, and so the
+switch) stays with the role and slug only. A switched-on member therefore
+cannot make more admins. The route (`app/api/b2b/team` PUT) still checks
+`isB2BManager`, so the Team-tab rule holds on the server too.
+
+## Ex-GST figures on the Leads tab are additive, and computed in Django
+
+Added 2026-10-29. `cartValue` and every stats `value` stay GST-inclusive and
+unchanged; Django adds `cartValueExclGst` to each `/crm/leads/` row and
+`valueExclGst` to each `/crm/leads/stats/` bucket (`total`/`active`/`won`/`lost`
+and every `byStatus` entry). The ex-GST figure is the **headline** — the big
+number on the pipeline and status cards, the bold table column, the mobile card —
+and the inclusive one sits beside it in grey as "incl. GST". Data:
+
+| Figure | Endpoint | Field |
+|---|---|---|
+| Cart Value (excl. GST) column, mobile card value | `/crm/leads/` | `cartValueExclGst` |
+| Headline on the pipeline and status cards | `/crm/leads/stats/` | `valueExclGst` |
+| Grey "incl. GST" line, Cart Value (incl. GST) column | both | `value` / `cartValue` |
+
+- **Not `/ 1.18` in the browser.** GST is per line (`EstimateItem.tax_value`,
+  `Variant.gst`), and the stats are summed server-side, so only Django can be
+  exact. `_fetch_excl_gst_ratios` (`order/crm/leads/repository/leads_query.py`)
+  takes each estimate's, else the live Cart's, Σ line ÷ (1 + rate) over
+  Σ line and scales the cart value by it; a deal with neither assumes 18 %.
+  Discounts and additional charges are scaled with the lines rather than
+  taxed separately.
+- **Opt-in on the backend** (`include_excl_gst=True`) for only the list and
+  plain stats calls. The dashboard and order-lost summaries build 100k-row
+  lists through the same function and would pay two extra aggregates; the
+  `bm_groups=` stats do not carry the field either.
+- **A missing field never passes the inclusive figure off as ex-GST.** The
+  table column shows "—"; a card headline falls back to the inclusive value but
+  its grey line then reads a bare "incl. GST", so the label always says which
+  number it is. An older Django returns exactly that. Deploy Django first.
+- Only the incl. GST column sorts: `sort_by=cartValue` is server-side, and a
+  client-side sort of the ex-GST column would order one page of 25, not the set.
+- **Column visibility is persisted**, so `materialdepot_cols_seen` records which
+  columns existed when the picker last saved; a column added since is turned on
+  once. `COLUMNS_ADDED_SINCE_PICKER` covers browsers that saved before that key
+  existed — add a future column there too.
+- Not in the CSV export: `CSV_HEADERS` is shared with the import parser, so a
+  new column would shift every imported field.

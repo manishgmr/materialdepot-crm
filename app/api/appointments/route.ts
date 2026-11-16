@@ -1,0 +1,185 @@
+import type { NextRequest } from "next/server";
+import { getCached, setCache } from "@/lib/server/cache";
+import { rateLimitedFetch } from "@/lib/server/rate-limiter";
+import { KYLAS_API_BASE_URL } from "@/lib/api/core/config";
+
+export const dynamic = "force-dynamic";
+
+const KYLAS_API_BASE =
+  KYLAS_API_BASE_URL;
+
+const BRANCH_ENUM_VALUES = [
+  "JP_NAGAR_EC",
+  "YELAHANKA_EC",
+  "WHITEFIELD_EC",
+  "GACHIBOWLI_EC",
+  "KOMPALLY_EC",
+  "HSR_EC",
+  "ELECTRONIC_CITY_EC",
+];
+
+const BRANCH_FIELD_ID = 2202881;
+const BRANCH_ENUM_CACHE_KEY = "appointments:branch-enums:v1";
+const BRANCH_ENUM_TTL_MS = 3_600_000;
+
+type PicklistValue = { name?: string; deleted?: boolean; disabled?: boolean };
+
+async function branchEnumValues(apiKey: string): Promise<string[]> {
+  const cached = getCached(BRANCH_ENUM_CACHE_KEY) as string[] | null;
+  if (cached) return cached;
+  try {
+    const res = await rateLimitedFetch(`${KYLAS_API_BASE}/fields/${BRANCH_FIELD_ID}`, {
+      headers: { "api-key": apiKey },
+    });
+    if (!res.ok) return BRANCH_ENUM_VALUES;
+    const data = (await res.json()) as { field?: { picklist?: { values?: PicklistValue[] } } };
+    const values = (data.field?.picklist?.values ?? [])
+      .filter((v) => !v.deleted && !v.disabled && typeof v.name === "string" && v.name)
+      .map((v) => v.name as string);
+
+    if (values.length === 0) return BRANCH_ENUM_VALUES;
+    setCache(BRANCH_ENUM_CACHE_KEY, values, BRANCH_ENUM_TTL_MS);
+    return values;
+  } catch {
+    return BRANCH_ENUM_VALUES;
+  }
+}
+
+const FIELDS = [
+  "id",
+  "firstName",
+  "lastName",
+  "phoneNumbers",
+  "requirementName",
+  "companyBusinessType",
+  "companyWebsite",
+  "customFieldValues",
+  "convertedAt",
+];
+
+const PAGE_SIZE = 1000;
+const MAX_PAGES = 20;
+const TTL_MS = 300_000;
+const CACHE_KEY = "appointments:v1";
+
+type RawLead = {
+  id: number;
+  firstName?: string | null;
+  lastName?: string | null;
+  phoneNumbers?: { value?: string; type?: string }[] | null;
+  requirementName?: string | null;
+  companyBusinessType?: unknown;
+  companyWebsite?: string | null;
+  convertedAt?: string | null;
+  customFieldValues?: Record<string, unknown> | null;
+};
+
+type Lead = {
+  id: number;
+  firstName?: string | null;
+  lastName?: string | null;
+  phoneNumbers?: { value?: string }[];
+  requirementName?: string | null;
+  companyBusinessType?: unknown;
+  companyWebsite?: string | null;
+  convertedAt?: string | null;
+  cfVisitScheduled: string;
+};
+
+function project(l: RawLead, visitAt: string): Lead {
+  const phone = l.phoneNumbers?.[0]?.value;
+  return {
+    id: l.id,
+    firstName: l.firstName ?? null,
+    lastName: l.lastName ?? null,
+    ...(phone ? { phoneNumbers: [{ value: phone }] } : {}),
+    requirementName: l.requirementName ?? null,
+    companyBusinessType: l.companyBusinessType ?? null,
+    companyWebsite: l.companyWebsite ?? null,
+    convertedAt: l.convertedAt ?? null,
+    cfVisitScheduled: visitAt,
+  };
+}
+
+type Payload = {
+  leads: Lead[];
+  fetchedAt: string;
+  scanned: number;
+  requests: number;
+};
+
+async function sweep(apiKey: string): Promise<Payload> {
+  const enums = await branchEnumValues(apiKey);
+  const body = {
+    fields: FIELDS,
+    jsonRule: {
+      condition: "OR",
+      rules: enums.map((v) => ({
+        id: "companyBusinessType",
+        field: "companyBusinessType",
+        type: "string",
+        input: "select",
+        operator: "equal",
+        value: v,
+      })),
+      valid: true,
+    },
+  };
+
+  const leads: Lead[] = [];
+  let scanned = 0;
+  let requests = 0;
+  let page = 0;
+
+  while (page < MAX_PAGES) {
+    const url = `${KYLAS_API_BASE}/search/lead?page=${page}&size=${PAGE_SIZE}&sort=${encodeURIComponent("updatedAt,desc")}`;
+    const res = await rateLimitedFetch(url, {
+      method: "POST",
+      headers: { "api-key": apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    requests++;
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`${res.status} ${text.slice(0, 300)}`);
+    }
+    const data = (await res.json()) as { content?: RawLead[]; totalPages?: number };
+    const content = data.content ?? [];
+    scanned += content.length;
+    for (const l of content) {
+
+      const raw = l.customFieldValues?.cfVisitScheduled;
+      if (typeof raw === "string" && raw) leads.push(project(l, raw));
+    }
+    page++;
+    if (content.length === 0 || page >= (data.totalPages ?? 0)) break;
+  }
+
+  return { leads, fetchedAt: new Date().toISOString(), scanned, requests };
+}
+
+export async function GET(request: NextRequest) {
+  const apiKey = process.env.KYLAS_API_KEY;
+  if (!apiKey) {
+    return Response.json({ error: "KYLAS_API_KEY is not configured" }, { status: 500 });
+  }
+
+  const force = new URL(request.url).searchParams.get("refresh") === "1";
+  const cached = getCached(CACHE_KEY) as Payload | null;
+  if (cached && !force) {
+    return Response.json({ ...cached, cached: true });
+  }
+
+  try {
+    const payload = await sweep(apiKey);
+    setCache(CACHE_KEY, payload, TTL_MS);
+    return Response.json({ ...payload, cached: false });
+  } catch (err) {
+
+    if (cached) {
+      return Response.json({ ...cached, cached: true, stale: true });
+    }
+    const message = err instanceof Error ? err.message : "Upstream request failed";
+    return Response.json({ error: message }, { status: 502 });
+  }
+}

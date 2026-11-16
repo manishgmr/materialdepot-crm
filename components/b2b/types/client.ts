@@ -1,0 +1,241 @@
+import { Escalation } from '../models/account-health';
+import { Segment } from '../models/inbound';
+import type { MeetingCheckIn } from '../models/outreach';
+import { CLIENT_ENTITY_TYPES, CLIENT_SOURCES, INTERACTION_TYPES, TEMPERATURE_BANDS } from '../constants/client';
+export type ClientEntityType = typeof CLIENT_ENTITY_TYPES[number];
+
+export type ClientSource = typeof CLIENT_SOURCES[number];
+
+export interface ClientContact {
+
+  number: string;
+  name?: string;
+
+  label?: string;
+  primary?: boolean;
+}
+
+export type StudioAccess = 'power' | 'non-power';
+
+export interface StudioLogin {
+  phone: string;
+  firmName?: string;
+  role: string;
+  visibleTabs: string[] | null;
+  power: boolean;
+  /** The FIRM's Studio Space tier (b2b-backend 0029, 2026-11-14). Absent from an older backend. */
+  tier?: 'power' | 'normal';
+}
+
+export type StudioLogins = Record<string, StudioLogin>;
+
+export interface StudioOrder {
+  enqId: string;
+  phone: string | null;
+  source: string;
+  value: number;
+  orderedOn: string | null;
+  status: string | null;
+}
+
+export interface StudioReferral {
+  name: string;
+  phone: string;
+  status: string;
+  referredOn: string | null;
+  orders: number;
+  value: number;
+}
+
+export interface StudioFirm {
+  partnerId: string;
+  firmName: string;
+  phones: string[];
+  gsts: string[];
+  logins: number;
+  power: boolean;
+  /** Power user or Normal user, chosen when Studio Space onboarded the firm (0029). */
+  tier?: 'power' | 'normal';
+  orders: StudioOrder[];
+  referrals: StudioReferral[];
+}
+
+export interface FirmStudioState {
+  numbers: number;
+  onboarded: number;
+  power: number;
+  unclassified: number;
+  firm: StudioFirm | null;
+  /** The firm's Studio Space access, Power or Normal (undefined = not on it). */
+  access?: StudioAccess;
+}
+
+type GstCheck = 'valid' | 'bad-format' | 'bad-checksum' | 'unknown-state' | 'empty';
+
+export interface ClientGst {
+
+  number: string;
+
+  registeredName?: string;
+
+  validatedAt?: string;
+}
+
+export interface GstValidation {
+  check: GstCheck;
+  normalized: string;
+  stateCode?: string;
+  stateName?: string;
+
+  pan?: string;
+  message?: string;
+
+  storable: boolean;
+}
+
+export interface ClientMergeRecord {
+
+  id: string;
+  company: string;
+  mergedAt: string;
+  mergedBy?: string;
+}
+
+export type FirmHandoverStatus = 'Pending' | 'Accepted' | 'Rejected';
+
+export interface KamAssignment {
+  kam: string;
+  kamPhone?: string;
+
+  at: string;
+  by?: string;
+  how?: 'manual' | 'round-robin';
+  status?: FirmHandoverStatus;
+  respondedAt?: string;
+  respondedBy?: string;
+  rejectReason?: string;
+  reason?: string;
+}
+
+export type SpocRole = 'inbound' | 'outreach' | 'kam' | 'ec';
+
+export interface SpocLogEntry {
+  role: Exclude<SpocRole, 'kam'>;
+  name: string;
+  from: string;
+  at: string;
+  by?: string;
+}
+
+export interface EnquirySpoc {
+  enqId: string;
+  name: string;
+  at: string;
+  by?: string;
+}
+
+export interface ClientEntity {
+  id: string;
+
+  company: string;
+  contacts: ClientContact[];
+  gsts: ClientGst[];
+  segment?: Segment;
+  clientType?: ClientEntityType;
+
+  clientTypeRaw?: string;
+  source: ClientSource;
+
+  kam?: string;
+
+  assignments?: KamAssignment[];
+  spocLog?: SpocLogEntry[];
+  enquirySpocs?: EnquirySpoc[];
+  remarks?: string;
+
+  interactions?: ClientInteraction[];
+
+  escalations?: Escalation[];
+  mergedFrom?: ClientMergeRecord[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type InteractionType = typeof INTERACTION_TYPES[number];
+
+export interface ClientInteraction {
+  id: string;
+  type: InteractionType;
+
+  date: string;
+  summary?: string;
+
+  temperature?: number;
+  upcomingProject?: string;
+
+  nextFollowUpDate?: string;
+  nextFollowUpTime?: string;
+  loggedBy?: string;
+  checkIn?: MeetingCheckIn;
+
+  createdAt?: string;
+}
+
+export type TemperatureBand = typeof TEMPERATURE_BANDS[number]['key'];
+
+export interface ClientOrderMetrics {
+
+  orders?: number;
+  totalRevenue?: number;
+
+  averageOrderValue?: number;
+
+  enquiries?: number;
+  openValue?: number;
+
+  lastOrderPlaced?: string;
+
+  studioOrders?: number;
+  studioRevenue?: number;
+
+  dateState: 'ok' | 'pending' | 'unavailable' | 'no-phone' | 'no-orders';
+}
+
+export type ClientStatus = 'Active' | 'Inactive 1–3 months' | 'Inactive 3–6 months' | 'Inactive 6–12 months' | 'Inactive 12+ months' | 'Never ordered' | 'Unknown';
+
+export interface StatusScale {
+  colors: Record<string, string>;
+  hint: Record<string, string>;
+}
+
+export type DuplicateEvidence = 'contact' | 'gst' | 'pan' | 'name';
+
+export interface DuplicateSuggestion {
+  a: ClientEntity;
+  b: ClientEntity;
+  evidence: DuplicateEvidence[];
+
+  shared: string[];
+}
+
+export type MergeField = 'company' | 'segment' | 'clientType' | 'kam' | 'source';
+
+export interface MergeConflict {
+  field: MergeField;
+
+  options: { value: string; from: string[] }[];
+}
+
+export interface MergeChoices {
+  company?: string;
+  segment?: Segment;
+  clientType?: ClientEntityType;
+  kam?: string;
+  source?: ClientSource;
+}
+
+export interface MergeResult {
+  merged: ClientEntity;
+
+  absorbed: ClientEntity[];
+}

@@ -1,0 +1,63 @@
+import { ORDER_TABS } from './constants';
+import { ClientEntity, contactNumbers, gstNumbers, normalizeContactNumber, normalizeGst } from '../../models/client';
+import { ClientOrderHistory, ClientOrderRow } from '@/lib/b2b';
+import { QUOTED_STATUSES } from '@/lib/b2b/revenue/constants';
+
+export type OrderTab = typeof ORDER_TABS[number]['key'];
+
+export function firmHolding(clients: ClientEntity[], selfId: string, key: { phone?: string; gst?: string }): ClientEntity | undefined {
+  const phone = key.phone ? normalizeContactNumber(key.phone) : '';
+  const gst = key.gst ? normalizeGst(key.gst) : '';
+  return clients.find((c) => c.id !== selfId
+    && ((!!phone && contactNumbers(c.contacts).includes(phone)) || (!!gst && gstNumbers(c.gsts).includes(gst))));
+}
+
+export function orderTab(r: ClientOrderRow): OrderTab {
+  if (r.ordered) return 'placed';
+  if (!r.open) return 'lost';
+  return QUOTED_STATUSES.has(r.status) ? 'pi' : 'open';
+}
+
+export function unlistedOrders(
+  rows: ClientOrderRow[],
+  phones: string[],
+  historyFor: (phone: string) => ClientOrderHistory | undefined,
+): { orders: number; value: number } {
+  let orders = 0, value = 0;
+  for (const phone of phones) {
+    const counted = historyFor(phone);
+    if (!counted) continue;
+    const listed = rows.filter((r) => r.ordered && r.contactNumber === phone);
+    const missing = counted.orders - listed.length;
+    if (missing <= 0) continue;
+    orders += missing;
+    value += Math.max(0, counted.lifetimeValue - listed.reduce((n, r) => n + r.orderValue, 0));
+  }
+  return { orders, value };
+}
+
+export function fmtPhone(n: string): string {
+  const d = normalizeContactNumber(n);
+  return d.length === 10 ? `${d.slice(0, 5)} ${d.slice(5)}` : n;
+}
+
+export function fmtGst(g: string): string {
+  const n = normalizeGst(g);
+  return n.length === 15 ? `${n.slice(0, 2)} ${n.slice(2, 12)} ${n.slice(12)}` : n;
+}
+
+export function fmtDate(iso: string | undefined): string {
+  if (!iso) return '';
+  const ms = Date.parse(`${String(iso).slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(ms)) return String(iso);
+  return new Date(ms).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
+export function fmtDateTime(iso: string | undefined): string {
+  if (!iso) return '';
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return iso;
+  return new Date(ms).toLocaleString('en-IN', {
+    day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Kolkata',
+  });
+}
